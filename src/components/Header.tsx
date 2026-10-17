@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Menu, Volume2, VolumeX, Dices, Sparkles, Settings as SettingsIcon, Share2, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Menu, Volume2, VolumeX, Dices, Sparkles, Settings as SettingsIcon, Share2, Bell, BellOff } from 'lucide-react';
 import { Room, Player } from '../types';
 import { ambientPlayer, SoundEffects } from '../utils/sound';
+import { notificationService } from '../utils/notifications';
 
 interface HeaderProps {
   currentRoom: Room | null;
@@ -23,6 +24,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenInvite,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(ambientPlayer.getStatus());
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>('default');
+
+  useEffect(() => {
+    setNotifPermission(notificationService.getPermission());
+  }, []);
 
   const handleToggleAudio = () => {
     SoundEffects.playChime();
@@ -33,6 +39,23 @@ export const Header: React.FC<HeaderProps> = ({
   const handleOpenDice = () => {
     SoundEffects.playChime();
     onOpenDiceModal();
+  };
+
+  const handleToggleNotifications = async () => {
+    SoundEffects.playChime();
+    if (notifPermission !== 'granted') {
+      const granted = await notificationService.requestPermission();
+      if (granted) {
+        setNotifPermission('granted');
+      }
+    } else {
+      // Send a test ping
+      notificationService.notify(
+        'Notificaciones Activas 🔔',
+        'Todo listo. Tu móvil te avisará cuando tu pareja te escriba.',
+        player.avatarUrl
+      );
+    }
   };
 
   return (
@@ -83,6 +106,29 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right: Quick action buttons */}
       <div className="flex items-center gap-1.5 shrink-0">
+        {/* Notifications Bell Button */}
+        <button
+          onClick={handleToggleNotifications}
+          className={`p-2 rounded-xl border transition-all active:scale-95 flex items-center gap-1 ${
+            notifPermission === 'granted'
+              ? 'bg-genshin-panel/80 border-genshin-gold/40 text-genshin-gold'
+              : 'bg-amber-600/20 border-amber-500/60 text-amber-300 animate-pulse'
+          }`}
+          title={
+            notifPermission === 'granted'
+              ? 'Notificaciones activadas (Toca para probar)'
+              : 'Toca para activar avisos en tu móvil'
+          }
+          aria-label="Notificaciones"
+        >
+          <Bell className="w-4 h-4" />
+          {notifPermission !== 'granted' && (
+            <span className="text-[10px] font-serif font-bold hidden xs:inline">
+              Avisos
+            </span>
+          )}
+        </button>
+
         {/* Profile Pill */}
         <button
           onClick={() => {
@@ -97,7 +143,7 @@ export const Header: React.FC<HeaderProps> = ({
             alt={player.displayName}
             className="w-6 h-6 rounded-lg object-cover"
           />
-          <span className="text-[11px] font-serif font-bold text-genshin-gold hidden xs:inline max-w-[75px] truncate">
+          <span className="text-[11px] font-serif font-bold text-genshin-gold hidden sm:inline max-w-[75px] truncate">
             {player.displayName}
           </span>
         </button>

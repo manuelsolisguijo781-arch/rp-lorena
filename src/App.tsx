@@ -14,6 +14,7 @@ import { Room, Player, Message, Expression, DiceRoll } from './types';
 import { parseMessageContent } from './utils/parser';
 import { supabase, dbService } from './lib/supabase';
 import { Sparkles, MessageSquare, Wifi, Loader2 } from 'lucide-react';
+import { notificationService } from './utils/notifications';
 
 const STORAGE_AUTH_KEY = 'rp_auth_user_v2';
 
@@ -44,6 +45,11 @@ export const App: React.FC = () => {
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Initialize Service Worker and Notifications on mount
+  useEffect(() => {
+    notificationService.init();
+  }, []);
 
   // Sync auth player to localStorage
   useEffect(() => {
@@ -138,6 +144,15 @@ export const App: React.FC = () => {
             if (prev.some((existing) => existing.id === incomingMsg.id)) return prev;
             return [...prev, incomingMsg];
           });
+
+          // Trigger mobile notification & vibration if message is from the other person
+          if (m.character_id !== player.id) {
+            notificationService.notify(
+              incomingMsg.senderName,
+              incomingMsg.content || (incomingMsg.imageUrl ? '📷 Te ha enviado una foto' : '🎲 Ha lanzado los dados'),
+              incomingMsg.senderAvatar
+            );
+          }
         }
       )
       .on(

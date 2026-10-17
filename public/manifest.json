@@ -1,0 +1,17 @@
+{
+  "name": "Crónicas de Rol",
+  "short_name": "Rol & D&D",
+  "description": "Plataforma privada de rol narrativo e interactivo con dados D&D",
+  "start_url": "/rp-lorena/",
+  "display": "standalone",
+  "background_color": "#0c1022",
+  "theme_color": "#0c1022",
+  "icons": [
+    {
+      "src": "/rp-lorena/genshin-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
