@@ -1,13 +1,61 @@
 /**
- * Mobile Push & Web Notifications Utility
- * Integrates Service Worker, Web Notification API, and Mobile Haptic Vibration
+ * Mobile Push & Web Notifications Utility with Full Customization
+ * Integrates Service Worker, Web Notification API, Sound and Mobile Haptic Vibration
  */
 import { SoundEffects } from './sound';
 
+export interface NotificationPreferences {
+  enabled: boolean;
+  sound: boolean;
+  vibration: boolean;
+  discreteMode: boolean; // Hide roleplay content on lockscreen
+}
+
+const STORAGE_KEY = 'rp_notification_preferences_v1';
+
+const DEFAULT_PREFERENCES: NotificationPreferences = {
+  enabled: true,
+  sound: true,
+  vibration: true,
+  discreteMode: false,
+};
+
 class NotificationService {
   private swRegistration: ServiceWorkerRegistration | null = null;
+  private preferences: NotificationPreferences = DEFAULT_PREFERENCES;
+
+  constructor() {
+    this.loadPreferences();
+  }
+
+  loadPreferences(): NotificationPreferences {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        this.preferences = { ...DEFAULT_PREFERENCES, ...JSON.parse(saved) };
+      }
+    } catch {
+      this.preferences = DEFAULT_PREFERENCES;
+    }
+    return this.preferences;
+  }
+
+  savePreferences(prefs: Partial<NotificationPreferences>): NotificationPreferences {
+    this.preferences = { ...this.preferences, ...prefs };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(this.preferences));
+    } catch {
+      // ignore
+    }
+    return this.preferences;
+  }
+
+  getPreferences(): NotificationPreferences {
+    return { ...this.preferences };
+  }
 
   async init(): Promise<void> {
+    this.loadPreferences();
     if ('serviceWorker' in navigator) {
       try {
         const reg = await navigator.serviceWorker.register('/rp-lorena/sw.js');
@@ -29,7 +77,7 @@ class NotificationService {
 
   async requestPermission(): Promise<boolean> {
     if (!this.isSupported()) {
-      alert('Tu navegador no soporta notificaciones web.');
+      alert('Tu navegador no soporta notificaciones web directas. En iPhone, añade la app a la Pantalla de Inicio.');
       return false;
     }
 
@@ -37,10 +85,11 @@ class NotificationService {
       const result = await Notification.requestPermission();
       if (result === 'granted') {
         SoundEffects.playCriticalSuccess();
+        this.savePreferences({ enabled: true });
         // Trigger test notification
         this.notify(
-          '¡Notificaciones Activadas! 🔔',
-          'Recibirás un aviso en tu móvil cada vez que tu pareja te escriba.',
+          '¡Avisos Activados! 🔔',
+          'Tu móvil te avisará cada vez que tu pareja continúe la historia.',
           '/rp-lorena/genshin-icon.svg'
         );
         return true;
@@ -53,36 +102,53 @@ class NotificationService {
   }
 
   notify(title: string, body: string, iconUrl?: string): void {
+    // 0. Check master enabled switch and browser permission
+    if (!this.preferences.enabled) {
+      return; // Silenced!
+    }
+
     if (!this.isSupported() || Notification.permission !== 'granted') {
       return;
     }
 
-    // 1. Play Sound
-    SoundEffects.playSend();
-
-    // 2. Trigger Mobile Vibration (2 short pulses)
-    if ('vibrate' in navigator) {
+    // 1. Play Sound (if enabled)
+    if (this.preferences.sound) {
       try {
-        navigator.vibrate([150, 80, 150]);
+        SoundEffects.playSend();
       } catch {
-        // Ignore vibration errors
+        // ignore
       }
     }
 
-    // 3. Display System Notification
+    // 2. Trigger Mobile Vibration (if enabled)
+    if (this.preferences.vibration && 'vibrate' in navigator) {
+      try {
+        navigator.vibrate([150, 80, 150]);
+      } catch {
+        // ignore
+      }
+    }
+
+    // 3. Discrete Mode check: hides message text for lockscreen privacy
+    const finalTitle = this.preferences.discreteMode ? 'Crónicas de Rol ✨' : title;
+    const finalBody = this.preferences.discreteMode
+      ? '💬 Tienes un nuevo mensaje secreto en la historia.'
+      : body;
+
+    // 4. Display System Notification
     const options: NotificationOptions = {
-      body: body,
+      body: finalBody,
       icon: iconUrl || '/rp-lorena/genshin-icon.svg',
       badge: '/rp-lorena/genshin-icon.svg',
       tag: 'rp-chat-msg',
-      silent: false,
+      silent: !this.preferences.sound,
     };
 
     if (this.swRegistration && 'showNotification' in this.swRegistration) {
-      this.swRegistration.showNotification(title, options);
+      this.swRegistration.showNotification(finalTitle, options);
     } else {
       try {
-        const notif = new Notification(title, options);
+        const notif = new Notification(finalTitle, options);
         notif.onclick = () => {
           window.focus();
           notif.close();

@@ -10,6 +10,8 @@ import { ProfileModal } from './components/ProfileModal';
 import { InviteModal } from './components/InviteModal';
 import { EmptyRoomsView } from './components/EmptyRoomsView';
 import { AuthModal } from './components/AuthModal';
+import { ContextModal } from './components/ContextModal';
+import { NotificationModal } from './components/NotificationModal';
 import { Room, Player, Message, Expression, DiceRoll } from './types';
 import { parseMessageContent } from './utils/parser';
 import { supabase, dbService } from './lib/supabase';
@@ -42,6 +44,8 @@ export const App: React.FC = () => {
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isContextOpen, setIsContextOpen] = useState(false);
+  const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -350,6 +354,13 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleUpdateRoomContext = async (newContext: string) => {
+    if (!currentRoom) return;
+    const updatedRoom = { ...currentRoom, description: newContext };
+    setRooms((prev) => prev.map((r) => (r.id === currentRoom.id ? updatedRoom : r)));
+    await supabase.from('rooms').update({ description: newContext }).eq('id', currentRoom.id);
+  };
+
   // Message counts
   const messageCounts = rooms.reduce((acc, r) => {
     acc[r.id] = r.id === currentRoomId ? messages.length : 0;
@@ -384,6 +395,8 @@ export const App: React.FC = () => {
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenProfile={() => setIsProfileOpen(true)}
         onOpenInvite={() => setIsInviteOpen(true)}
+        onOpenContext={() => setIsContextOpen(true)}
+        onOpenNotifications={() => setIsNotificationModalOpen(true)}
       />
 
       {/* Cloud Status Indicator Bar */}
@@ -505,6 +518,21 @@ export const App: React.FC = () => {
           room={currentRoom}
         />
       )}
+
+      {/* Context & World Lore Modal */}
+      <ContextModal
+        isOpen={isContextOpen}
+        onClose={() => setIsContextOpen(false)}
+        currentRoom={currentRoom}
+        onUpdateRoomContext={handleUpdateRoomContext}
+      />
+
+      {/* Push Notification Preferences Modal */}
+      <NotificationModal
+        isOpen={isNotificationModalOpen}
+        onClose={() => setIsNotificationModalOpen(false)}
+        playerAvatar={player.avatarUrl}
+      />
 
       {/* Settings & Export Modal */}
       <SettingsModal

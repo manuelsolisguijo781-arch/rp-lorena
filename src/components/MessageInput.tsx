@@ -96,7 +96,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   };
 
   return (
-    <div className="relative z-20 bg-genshin-dark/95 backdrop-blur-md border-t border-genshin-gold/30 p-2 sm:p-3 shadow-2xl">
+    <div className="relative z-20 bg-genshin-dark/95 backdrop-blur-md border-t border-genshin-gold/30 p-2 sm:p-3 pb-[max(env(safe-area-inset-bottom,0px),10px)] shadow-2xl">
       {/* Expression Picker Popup */}
       {showExpressions && (
         <div className="absolute bottom-full left-3 mb-2 p-2 rounded-2xl bg-genshin-card border border-genshin-gold/50 shadow-2xl flex gap-1.5 animate-fadeIn z-30">
