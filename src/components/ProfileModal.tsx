@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, User, Heart, Sparkles, Shield, Award, LogOut, Check } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, User, Heart, Sparkles, Shield, Award, LogOut, Camera, Loader2, Image as ImageIcon } from 'lucide-react';
 import { Player } from '../types';
+import { dbService } from '../lib/supabase';
 import { SoundEffects } from '../utils/sound';
 
 interface ProfileModalProps {
@@ -24,11 +25,41 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
   const [bio, setBio] = useState(player.bio);
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl);
   const [activeTab, setActiveTab] = useState<'profile' | 'stats'>('profile');
+  const [isUploading, setIsUploading] = useState(false);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
   const affectionLevel = Math.min(10, Math.floor(messageCount / 10) + 1);
   const affectionProgress = Math.min(100, ((messageCount % 10) / 10) * 100);
+
+  // Handle uploading photo directly from phone gallery / camera
+  const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    SoundEffects.playChime();
+
+    try {
+      const publicUrl = await dbService.uploadImage(file);
+      if (publicUrl) {
+        setAvatarUrl(publicUrl);
+        SoundEffects.playCriticalSuccess();
+      } else {
+        alert('No se pudo subir la foto. Inténtalo de nuevo.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Error al procesar la foto de la galería.');
+    } finally {
+      setIsUploading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,7 +145,55 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
         {/* Tab Content */}
         <div className="p-4 overflow-y-auto flex-1">
           {activeTab === 'profile' ? (
-            <form id="profileForm" onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+            <form id="profileForm" onSubmit={handleSubmit} className="space-y-4 text-xs">
+              {/* Photo Upload Area (Mobile Gallery & Camera) */}
+              <div className="flex flex-col items-center justify-center pt-1 pb-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoSelect}
+                  className="hidden"
+                />
+
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="relative group cursor-pointer w-24 h-24 rounded-3xl overflow-hidden border-2 border-genshin-gold/60 hover:border-genshin-gold p-1 bg-genshin-dark/80 shadow-genshin-gold transition-all active:scale-95"
+                  title="Toca para abrir la galería y cambiar foto"
+                >
+                  <img
+                    src={avatarUrl}
+                    alt={displayName}
+                    className="w-full h-full object-cover rounded-2xl"
+                  />
+
+                  {/* Overlay button */}
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-[2px] rounded-2xl flex flex-col items-center justify-center opacity-80 group-hover:opacity-100 transition-opacity">
+                    {isUploading ? (
+                      <Loader2 className="w-7 h-7 text-genshin-gold animate-spin" />
+                    ) : (
+                      <>
+                        <Camera className="w-6 h-6 text-genshin-gold mb-1" />
+                        <span className="text-[10px] text-amber-100 font-serif font-bold">
+                          Cambiar Foto
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* Direct button to trigger gallery */}
+                <button
+                  type="button"
+                  disabled={isUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="mt-2.5 px-3 py-1.5 rounded-xl bg-genshin-panel hover:bg-genshin-border text-genshin-gold border border-genshin-gold/40 text-[11px] font-serif font-bold inline-flex items-center gap-1.5 active:scale-95 transition-all shadow-sm"
+                >
+                  <ImageIcon className="w-3.5 h-3.5" />
+                  <span>{isUploading ? 'Subiendo foto...' : 'Abrir Galería del Móvil'}</span>
+                </button>
+              </div>
+
               <div>
                 <label className="text-[11px] text-genshin-gold font-medium block mb-1">
                   Nombre de Usuario (Login)
@@ -149,32 +228,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   placeholder="Ej: Hechicera solitaria, Viajero errante..."
                   className="w-full px-3 py-2 rounded-xl bg-genshin-panel border border-slate-700 text-slate-100 focus:border-genshin-gold focus:outline-none"
                 />
-              </div>
-
-              <div>
-                <label className="text-[11px] text-genshin-gold font-medium block mb-1">
-                  URL de tu Avatar / Foto de Perfil
-                </label>
-                <input
-                  type="url"
-                  value={avatarUrl}
-                  onChange={(e) => setAvatarUrl(e.target.value)}
-                  placeholder="https://..."
-                  className="w-full px-3 py-2 rounded-xl bg-genshin-panel border border-slate-700 text-slate-100 focus:border-genshin-gold focus:outline-none"
-                />
-              </div>
-
-              {/* Avatar Preview */}
-              <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-genshin-panel/50 border border-slate-700/60">
-                <img
-                  src={avatarUrl}
-                  alt="Vista previa"
-                  className="w-12 h-12 rounded-xl object-cover border border-genshin-gold/50 shadow-md"
-                />
-                <div>
-                  <div className="font-serif font-bold text-amber-100">{displayName}</div>
-                  <div className="text-[11px] text-slate-400">{bio || 'Sin descripción'}</div>
-                </div>
               </div>
 
               {/* Logout button */}
@@ -231,6 +284,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <button
             type="submit"
             form="profileForm"
+            disabled={isUploading}
             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 text-amber-950 font-serif font-bold text-xs uppercase tracking-wider shadow-genshin-gold hover:brightness-110 active:scale-95 transition-all"
           >
             Guardar Cambios
