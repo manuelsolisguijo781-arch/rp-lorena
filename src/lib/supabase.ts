@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Room, Player, Message, DiceRoll, Expression } from '../types';
+import { Room, Player, Message, DiceRoll, Expression, ChallengeData } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://prgmytgvueopakwzppge.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_SLga2tSRZmZc4pgAXRQ4IQ_Qh9u7FR4';
@@ -14,6 +14,42 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     },
   },
 });
+
+function serializeBio(player: Partial<Player>): string {
+  if (player.outfit !== undefined || player.condition !== undefined || player.weapon !== undefined) {
+    return JSON.stringify({
+      bio: player.bio || '',
+      outfit: player.outfit || '',
+      condition: player.condition || '',
+      weapon: player.weapon || '',
+    });
+  }
+  return player.bio || '';
+}
+
+function parseBio(rawBio: string | null | undefined): {
+  bio: string;
+  outfit?: string;
+  condition?: string;
+  weapon?: string;
+} {
+  if (!rawBio) return { bio: '' };
+  try {
+    const trimmed = rawBio.trim();
+    if (trimmed.startsWith('{') && trimmed.endsWith('}')) {
+      const parsed = JSON.parse(trimmed);
+      return {
+        bio: parsed.bio || '',
+        outfit: parsed.outfit || undefined,
+        condition: parsed.condition || undefined,
+        weapon: parsed.weapon || undefined,
+      };
+    }
+  } catch {
+    // not JSON
+  }
+  return { bio: rawBio };
+}
 
 export const dbService = {
   // --- AUTHENTICATION & PROFILES ---
@@ -44,6 +80,9 @@ export const dbService = {
       displayName: displayName || username,
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
       bio: 'Explorando nuevas historias...',
+      outfit: 'Ropa de viajero/a',
+      condition: 'Normal',
+      weapon: 'Sin arma',
       password: password,
       createdAt: Date.now(),
     };
@@ -53,7 +92,7 @@ export const dbService = {
       username: newPlayer.username,
       display_name: newPlayer.displayName,
       avatar_url: newPlayer.avatarUrl,
-      bio: newPlayer.bio,
+      bio: serializeBio(newPlayer),
       active_character_id: password, // Store password securely in active_character_id column
       updated_at: new Date().toISOString(),
     });
@@ -84,13 +123,41 @@ export const dbService = {
       throw new Error('Contraseña incorrecta. Inténtalo de nuevo.');
     }
 
+    const parsed = parseBio(data.bio);
+
     return {
       id: data.id,
       username: data.username,
       displayName: data.display_name || data.username,
       avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
-      bio: data.bio || '',
+      bio: parsed.bio,
+      outfit: parsed.outfit || 'Ropa habitual',
+      condition: parsed.condition || 'Normal',
+      weapon: parsed.weapon || 'Ninguna',
       password: data.active_character_id,
+      createdAt: new Date(data.updated_at || Date.now()).getTime(),
+    };
+  },
+
+  async fetchProfileById(userId: string): Promise<Player | null> {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (error || !data) return null;
+
+    const parsed = parseBio(data.bio);
+    return {
+      id: data.id,
+      username: data.username,
+      displayName: data.display_name || data.username,
+      avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
+      bio: parsed.bio,
+      outfit: parsed.outfit || 'Ropa habitual',
+      condition: parsed.condition || 'Normal',
+      weapon: parsed.weapon || 'Ninguna',
       createdAt: new Date(data.updated_at || Date.now()).getTime(),
     };
   },
@@ -99,7 +166,7 @@ export const dbService = {
     await supabase.from('profiles').update({
       display_name: player.displayName,
       avatar_url: player.avatarUrl,
-      bio: player.bio,
+      bio: serializeBio(player),
       updated_at: new Date().toISOString(),
     }).eq('id', player.id);
   },
@@ -317,6 +384,7 @@ export const dbService = {
         content: m.content || '',
         parsedBlocks: m.parsed_blocks || [],
         diceRoll: (m.dice_roll as DiceRoll) || undefined,
+        challenge: ((m.dice_roll as any)?.challenge as ChallengeData) || undefined,
         imageUrl: parsedImages.length > 0 ? parsedImages[0] : undefined,
         imageUrls: parsedImages,
         isSecret: isSecretMessage,
@@ -347,6 +415,75 @@ export const dbService = {
       image_url: storedImageUrl,
       created_at: new Date(message.timestamp).toISOString(),
     });
+  },
+
+  async respondToChallenge(
+    messageId: string,
+    targetPlayer: Player,
+    targetRoll: DiceRoll
+  ): Promise<Message | null> {
+    const { data: msgRow, error: fetchErr } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('id', messageId)
+      .maybeSingle();
+
+    if (fetchErr || !msgRow || !msgRow.dice_roll) return null;
+
+    const existingRoll = msgRow.dice_roll as DiceRoll;
+    const existingChallenge = existingRoll.challenge;
+    if (!existingChallenge) return null;
+
+    const challengerTotal = existingChallenge.challengerRoll;
+    const targetTotal = targetRoll.total;
+
+    let winnerName = '';
+    let isDraw = false;
+    if (challengerTotal > targetTotal) {
+      winnerName = existingChallenge.challengerName;
+    } else if (targetTotal > challengerTotal) {
+      winnerName = targetPlayer.displayName;
+    } else {
+      isDraw = true;
+    }
+
+    const updatedChallenge: ChallengeData = {
+      ...existingChallenge,
+      targetId: targetPlayer.id,
+      targetName: targetPlayer.displayName,
+      targetRoll: targetTotal,
+      targetOutcome: targetRoll.outcome,
+      winnerName: winnerName,
+      isDraw: isDraw,
+      status: 'completed',
+    };
+
+    const updatedDiceRoll: DiceRoll = {
+      ...existingRoll,
+      challenge: updatedChallenge,
+    };
+
+    await supabase
+      .from('messages')
+      .update({
+        dice_roll: updatedDiceRoll,
+      })
+      .eq('id', messageId);
+
+    return {
+      id: msgRow.id,
+      roomId: msgRow.room_id,
+      senderId: msgRow.character_id,
+      senderName: msgRow.character_name,
+      senderAvatar: msgRow.character_avatar || '',
+      expression: (msgRow.expression || 'normal') as Expression,
+      content: msgRow.content || '',
+      parsedBlocks: msgRow.parsed_blocks || [],
+      diceRoll: updatedDiceRoll,
+      challenge: updatedChallenge,
+      imageUrl: msgRow.image_url || undefined,
+      timestamp: new Date(msgRow.created_at).getTime(),
+    };
   },
 
   async clearRoomMessages(roomId: string): Promise<void> {

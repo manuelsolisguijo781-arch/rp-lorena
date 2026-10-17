@@ -6,6 +6,9 @@ export interface Player {
   displayName: string;
   avatarUrl: string;
   bio: string;
+  outfit?: string; // Atuendo / Ropa actual
+  condition?: string; // Estado actual (Normal, Atada, Excitada, etc.)
+  weapon?: string; // Arma, accesorio o posesión especial
   password?: string;
   createdAt: number;
 }
@@ -13,6 +16,20 @@ export interface Player {
 export type DiceType = 'd20' | 'd100' | 'd12' | 'd10' | 'd8' | 'd6' | 'd4';
 
 export type RollOutcome = 'critical_success' | 'success' | 'mixed' | 'failure' | 'critical_failure';
+
+export interface ChallengeData {
+  challengerId: string;
+  challengerName: string;
+  challengerRoll: number;
+  challengerOutcome: RollOutcome;
+  targetId?: string;
+  targetName?: string;
+  targetRoll?: number;
+  targetOutcome?: RollOutcome;
+  winnerName?: string;
+  isDraw?: boolean;
+  status: 'pending' | 'completed';
+}
 
 export interface DiceRoll {
   diceType: DiceType;
@@ -22,6 +39,7 @@ export interface DiceRoll {
   total: number;
   outcome: RollOutcome;
   description?: string;
+  challenge?: ChallengeData;
 }
 
 export interface MessageBlock {
@@ -39,6 +57,7 @@ export interface Message {
   content: string; // Raw text with *actions* and ||secrets||
   parsedBlocks: MessageBlock[];
   diceRoll?: DiceRoll;
+  challenge?: ChallengeData;
   imageUrl?: string; // Single image or primary thumbnail
   imageUrls?: string[]; // Multiple images attached to the message
   isSecret?: boolean; // If true, the entire message / photos are blurred until tapped

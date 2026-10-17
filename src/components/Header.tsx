@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, Volume2, VolumeX, Dices, Sparkles, Settings as SettingsIcon, Share2, Bell, BookOpen } from 'lucide-react';
+import { Menu, Volume2, VolumeX, Dices, Sparkles, Settings as SettingsIcon, Share2, Bell, BookOpen, Images } from 'lucide-react';
 import { Room, Player } from '../types';
 import { ambientPlayer, SoundEffects } from '../utils/sound';
 import { notificationService } from '../utils/notifications';
@@ -14,6 +14,7 @@ interface HeaderProps {
   onOpenInvite: () => void;
   onOpenContext: () => void;
   onOpenNotifications: () => void;
+  onOpenGallery: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -26,6 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenInvite,
   onOpenContext,
   onOpenNotifications,
+  onOpenGallery,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(ambientPlayer.getStatus());
   const [prefs, setPrefs] = useState(notificationService.getPreferences());
@@ -53,6 +55,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleContextClick = () => {
     SoundEffects.playChime();
     onOpenContext();
+  };
+
+  const handleGalleryClick = () => {
+    SoundEffects.playChime();
+    onOpenGallery();
   };
 
   return (
@@ -103,6 +110,18 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right: Quick action buttons */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        {/* Gallery / Memories Album button */}
+        {currentRoom && (
+          <button
+            onClick={handleGalleryClick}
+            className="p-1.5 sm:p-2 rounded-xl bg-genshin-panel/90 hover:bg-genshin-card active:scale-95 border border-genshin-gold/40 text-genshin-gold transition-all shadow-sm"
+            title="Álbum de Fotos y Recuerdos"
+            aria-label="Álbum de fotos"
+          >
+            <Images className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-genshin-gold" />
+          </button>
+        )}
+
         {/* Context & Lore Map Button */}
         <button
           onClick={handleContextClick}
@@ -111,7 +130,7 @@ export const Header: React.FC<HeaderProps> = ({
           aria-label="Contexto y Lore"
         >
           <BookOpen className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-genshin-gold" />
-          <span className="text-[10px] sm:text-xs font-serif font-bold">
+          <span className="text-[10px] sm:text-xs font-serif font-bold hidden xs:inline">
             Contexto
           </span>
         </button>

@@ -12,7 +12,9 @@ import { EmptyRoomsView } from './components/EmptyRoomsView';
 import { AuthModal } from './components/AuthModal';
 import { ContextModal } from './components/ContextModal';
 import { NotificationModal } from './components/NotificationModal';
-import { Room, Player, Message, Expression, DiceRoll } from './types';
+import { GalleryModal } from './components/GalleryModal';
+import { CharacterSheetModal } from './components/CharacterSheetModal';
+import { Room, Player, Message, Expression, DiceRoll, RollOutcome } from './types';
 import { parseMessageContent } from './utils/parser';
 import { supabase, dbService } from './lib/supabase';
 import { Sparkles, MessageSquare, Wifi, Loader2 } from 'lucide-react';
@@ -46,6 +48,9 @@ export const App: React.FC = () => {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isContextOpen, setIsContextOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isGalleryOpen, setIsGalleryOpen] = useState(false);
+  const [characterSheetPlayer, setCharacterSheetPlayer] = useState<Player | null>(null);
+  const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -394,6 +399,64 @@ export const App: React.FC = () => {
     await supabase.from('rooms').update({ description: newContext }).eq('id', currentRoom.id);
   };
 
+  const handleOpenCharacterSheet = async (senderId?: string) => {
+    if (!player) return;
+    if (!senderId || senderId === player.id) {
+      setCharacterSheetPlayer(player);
+      setIsCharacterSheetOpen(true);
+      return;
+    }
+
+    try {
+      const partnerProfile = await dbService.fetchProfileById(senderId);
+      if (partnerProfile) {
+        setCharacterSheetPlayer(partnerProfile);
+        setIsCharacterSheetOpen(true);
+      } else {
+        // Fallback to minimal player if profile row not found
+        const msg = messages.find((m) => m.senderId === senderId);
+        setCharacterSheetPlayer({
+          id: senderId,
+          username: msg?.senderName || 'Aventurero',
+          displayName: msg?.senderName || 'Aventurero',
+          avatarUrl: msg?.senderAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+          bio: 'Un compañero de viaje misterioso.',
+          createdAt: Date.now(),
+        });
+        setIsCharacterSheetOpen(true);
+      }
+    } catch (err) {
+      console.error('Error fetching character sheet:', err);
+    }
+  };
+
+  const handleRespondToChallenge = async (messageId: string) => {
+    if (!player) return;
+    const rollVal = Math.floor(Math.random() * 20) + 1;
+    let outcome: RollOutcome = 'mixed';
+    if (rollVal === 20) outcome = 'critical_success';
+    else if (rollVal === 1) outcome = 'critical_failure';
+    else if (rollVal >= 12) outcome = 'success';
+    else if (rollVal >= 8) outcome = 'mixed';
+    else outcome = 'failure';
+
+    const challengeResponseRoll: DiceRoll = {
+      diceType: 'd20',
+      actionName: 'Respuesta al Desafío',
+      rollValue: rollVal,
+      modifier: 0,
+      total: rollVal,
+      outcome,
+    };
+
+    const updatedMsg = await dbService.respondToChallenge(messageId, player, challengeResponseRoll);
+    if (updatedMsg) {
+      setMessages((prev) =>
+        prev.map((m) => (m.id === messageId ? updatedMsg : m))
+      );
+    }
+  };
+
   // Message counts
   const messageCounts = rooms.reduce((acc, r) => {
     acc[r.id] = r.id === currentRoomId ? messages.length : 0;
@@ -430,6 +493,7 @@ export const App: React.FC = () => {
         onOpenInvite={() => setIsInviteOpen(true)}
         onOpenContext={() => setIsContextOpen(true)}
         onOpenNotifications={() => setIsNotificationModalOpen(true)}
+        onOpenGallery={() => setIsGalleryOpen(true)}
       />
 
       {/* Cloud Status Indicator Bar */}
@@ -481,7 +545,10 @@ export const App: React.FC = () => {
                 <MessageItem
                   key={msg.id}
                   message={msg}
+                  currentUserId={player.id}
                   onImageClick={(url) => setSelectedPhotoUrl(url)}
+                  onRespondChallenge={handleRespondToChallenge}
+                  onAvatarClick={handleOpenCharacterSheet}
                 />
               ))
             ) : (
@@ -524,6 +591,7 @@ export const App: React.FC = () => {
       <DiceModal
         isOpen={isDiceModalOpen}
         onClose={() => setIsDiceModalOpen(false)}
+        player={player}
         onSendRoll={handleSendDiceRoll}
       />
 
@@ -577,6 +645,24 @@ export const App: React.FC = () => {
         onClearRoomHistory={handleClearRoomHistory}
         onLeaveRoom={handleLeaveRoom}
         onLogout={handleLogout}
+      />
+
+      {/* Room Photo Gallery Modal */}
+      <GalleryModal
+        isOpen={isGalleryOpen}
+        onClose={() => setIsGalleryOpen(false)}
+        room={currentRoom}
+        messages={messages}
+        onImageClick={(url) => setSelectedPhotoUrl(url)}
+      />
+
+      {/* Character Sheet / Outfit / Condition Modal */}
+      <CharacterSheetModal
+        isOpen={isCharacterSheetOpen}
+        onClose={() => setIsCharacterSheetOpen(false)}
+        targetPlayer={characterSheetPlayer}
+        isOwnProfile={characterSheetPlayer?.id === player?.id}
+        onSaveProfile={handleSaveProfile}
       />
     </div>
   );

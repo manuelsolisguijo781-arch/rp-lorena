@@ -1,11 +1,14 @@
 import React, { useState } from 'react';
 import { Message, Expression } from '../types';
-import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle, Eye, Lock, Swords } from 'lucide-react';
 import { SoundEffects } from '../utils/sound';
 
 interface MessageItemProps {
   message: Message;
+  currentUserId?: string;
   onImageClick?: (imageUrl: string) => void;
+  onRespondChallenge?: (messageId: string) => void;
+  onAvatarClick?: (senderId: string) => void;
 }
 
 const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = {
@@ -17,7 +20,13 @@ const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = 
   serious: { label: 'Solemne', emoji: '🧐' },
 };
 
-export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick }) => {
+export const MessageItem: React.FC<MessageItemProps> = ({
+  message,
+  currentUserId,
+  onImageClick,
+  onRespondChallenge,
+  onAvatarClick,
+}) => {
   const [isSecretRevealed, setIsSecretRevealed] = useState(false);
   const [revealedBlockIndices, setRevealedBlockIndices] = useState<Record<number, boolean>>({});
 
@@ -51,9 +60,13 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
   return (
     <div className="relative group px-2 sm:px-4 py-2 transition-all">
       <div className="max-w-3xl mx-auto flex gap-2.5 sm:gap-3.5 items-start">
-        {/* Avatar */}
+        {/* Avatar - Clickable to open Character Sheet */}
         <div className="relative shrink-0 pt-1">
-          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border border-genshin-gold/40 p-0.5 bg-genshin-card shadow-md">
+          <div
+            onClick={() => onAvatarClick?.(message.senderId)}
+            className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border border-genshin-gold/40 p-0.5 bg-genshin-card shadow-md cursor-pointer hover:border-genshin-gold hover:scale-105 transition-all"
+            title={`Ver ficha de personaje de ${message.senderName}`}
+          >
             <img
               src={message.senderAvatar}
               alt={message.senderName}
@@ -67,7 +80,10 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
         <div className="flex-1 min-w-0">
           {/* Header row: Sender Name, Expression, Timestamp */}
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <span className="font-serif font-bold text-xs sm:text-sm text-genshin-gold tracking-wide">
+            <span
+              onClick={() => onAvatarClick?.(message.senderId)}
+              className="font-serif font-bold text-xs sm:text-sm text-genshin-gold tracking-wide cursor-pointer hover:underline"
+            >
               {message.senderName}
             </span>
 
@@ -94,74 +110,150 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
 
           {/* D&D Dice Roll Card (if present) */}
           {message.diceRoll && (
-            <div
-              className={`mb-2.5 p-3 rounded-2xl border backdrop-blur-md transition-all ${
-                message.diceRoll.outcome === 'critical_success'
-                  ? 'bg-gradient-to-r from-amber-950/60 to-yellow-950/40 border-genshin-gold shadow-genshin-gold'
-                  : message.diceRoll.outcome === 'critical_failure'
-                  ? 'bg-gradient-to-r from-red-950/60 to-rose-950/40 border-genshin-crimson shadow-md'
-                  : 'bg-genshin-card/90 border-slate-700/80'
-              }`}
-            >
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="font-serif font-bold text-genshin-gold flex items-center gap-1.5">
-                  <Dices className="w-4 h-4 text-genshin-gold" />
-                  {message.diceRoll.actionName}
-                </span>
-                <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-slate-300 border border-slate-700">
-                  {message.diceRoll.diceType}
-                </span>
-              </div>
-
-              {message.diceRoll.description && (
-                <div className="text-[11px] text-slate-300 italic mb-2">
-                  {message.diceRoll.description}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                <div className="flex items-baseline gap-2">
-                  <span className="text-xl sm:text-2xl font-serif font-bold text-amber-100">
-                    {message.diceRoll.total}
+            message.diceRoll.challenge ? (
+              /* --- DADO DESAFÍO / DUELO OPUESTO CARD --- */
+              <div className="mb-2.5 p-3.5 rounded-2xl border bg-gradient-to-r from-red-950/70 via-amber-950/50 to-yellow-950/40 border-red-500/60 shadow-lg backdrop-blur-md">
+                <div className="flex items-center justify-between text-xs mb-1.5">
+                  <span className="font-serif font-bold text-amber-200 flex items-center gap-1.5">
+                    <Swords className="w-4 h-4 text-red-400 animate-pulse" />
+                    {message.diceRoll.actionName}
                   </span>
-                  {message.diceRoll.modifier !== 0 && (
-                    <span className="text-[10px] text-slate-400 font-mono">
-                      (dado: {message.diceRoll.rollValue}{' '}
-                      {message.diceRoll.modifier > 0
-                        ? `+ ${message.diceRoll.modifier}`
-                        : message.diceRoll.modifier}
-                      )
-                    </span>
-                  )}
+                  <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-900/60 text-red-200 border border-red-500/50">
+                    Duelo Opuesto
+                  </span>
                 </div>
 
-                <div className="text-xs font-serif font-bold">
-                  {message.diceRoll.outcome === 'critical_success' && (
-                    <span className="text-genshin-gold flex items-center gap-1">
-                      <Sparkles className="w-3.5 h-3.5 animate-spin" /> ¡Éxito Crítico!
+                {message.diceRoll.description && (
+                  <div className="text-[11px] text-slate-300 italic mb-2">
+                    {message.diceRoll.description}
+                  </div>
+                )}
+
+                {message.diceRoll.challenge.status === 'pending' ? (
+                  <div className="pt-2 border-t border-slate-700/60 space-y-2">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-slate-300">
+                        <strong>{message.diceRoll.challenge.challengerName}</strong> sacó:
+                      </span>
+                      <span className="text-xl font-serif font-bold text-genshin-gold">
+                        {message.diceRoll.challenge.challengerRoll}
+                      </span>
+                    </div>
+
+                    {currentUserId !== message.senderId ? (
+                      <button
+                        type="button"
+                        onClick={() => onRespondChallenge?.(message.id)}
+                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 via-amber-600 to-yellow-600 text-white font-serif font-bold text-xs uppercase tracking-wider shadow-genshin-gold hover:brightness-110 active:scale-95 transition-all flex items-center justify-center gap-1.5 animate-pulse"
+                      >
+                        <Dices className="w-4 h-4 text-amber-200" />
+                        <span>⚔️ Responder al Desafío (Tirar d20)</span>
+                      </button>
+                    ) : (
+                      <div className="text-[11px] text-center text-amber-300/90 italic py-1.5 bg-black/40 rounded-xl border border-slate-800">
+                        ⏳ Desafío lanzado • Esperando respuesta de tu pareja...
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="pt-2 border-t border-slate-700/60 space-y-2">
+                    <div className="grid grid-cols-2 gap-2 text-center p-2 rounded-xl bg-black/50 border border-slate-800">
+                      <div>
+                        <div className="text-[10px] text-slate-400 truncate">{message.diceRoll.challenge.challengerName}</div>
+                        <div className="text-xl font-serif font-bold text-amber-100">{message.diceRoll.challenge.challengerRoll}</div>
+                      </div>
+                      <div className="border-l border-slate-700/60">
+                        <div className="text-[10px] text-slate-400 truncate">{message.diceRoll.challenge.targetName}</div>
+                        <div className="text-xl font-serif font-bold text-amber-100">{message.diceRoll.challenge.targetRoll}</div>
+                      </div>
+                    </div>
+
+                    <div className="text-center py-1">
+                      {message.diceRoll.challenge.isDraw ? (
+                        <span className="text-xs font-serif font-bold text-amber-300">
+                          🤝 ¡Empate en el Duelo!
+                        </span>
+                      ) : (
+                        <span className="text-xs font-serif font-bold text-genshin-gold flex items-center justify-center gap-1.5">
+                          <Sparkles className="w-4 h-4 text-genshin-gold animate-spin" />
+                          ¡Victoria de {message.diceRoll.challenge.winnerName}!
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* --- STANDARD DICE ROLL CARD --- */
+              <div
+                className={`mb-2.5 p-3 rounded-2xl border backdrop-blur-md transition-all ${
+                  message.diceRoll.outcome === 'critical_success'
+                    ? 'bg-gradient-to-r from-amber-950/60 to-yellow-950/40 border-genshin-gold shadow-genshin-gold'
+                    : message.diceRoll.outcome === 'critical_failure'
+                    ? 'bg-gradient-to-r from-red-950/60 to-rose-950/40 border-genshin-crimson shadow-md'
+                    : 'bg-genshin-card/90 border-slate-700/80'
+                }`}
+              >
+                <div className="flex items-center justify-between text-xs mb-1">
+                  <span className="font-serif font-bold text-genshin-gold flex items-center gap-1.5">
+                    <Dices className="w-4 h-4 text-genshin-gold" />
+                    {message.diceRoll.actionName}
+                  </span>
+                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-slate-300 border border-slate-700">
+                    {message.diceRoll.diceType}
+                  </span>
+                </div>
+
+                {message.diceRoll.description && (
+                  <div className="text-[11px] text-slate-300 italic mb-2">
+                    {message.diceRoll.description}
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-xl sm:text-2xl font-serif font-bold text-amber-100">
+                      {message.diceRoll.total}
                     </span>
-                  )}
-                  {message.diceRoll.outcome === 'critical_failure' && (
-                    <span className="text-genshin-crimson flex items-center gap-1">
-                      <ShieldAlert className="w-3.5 h-3.5" /> ¡Pifia Crítica!
-                    </span>
-                  )}
-                  {message.diceRoll.outcome === 'success' && (
-                    <span className="text-emerald-400 flex items-center gap-1">
-                      <CheckCircle className="w-3.5 h-3.5" /> Éxito
-                    </span>
-                  )}
-                  {message.diceRoll.outcome === 'mixed' && (
-                    <span className="text-amber-300 flex items-center gap-1">
-                      <AlertCircle className="w-3.5 h-3.5" /> Matices
-                    </span>
-                  )}
-                  {message.diceRoll.outcome === 'failure' && (
-                    <span className="text-red-400">Fallo</span>
-                  )}
+                    {message.diceRoll.modifier !== 0 && (
+                      <span className="text-[10px] text-slate-400 font-mono">
+                        (dado: {message.diceRoll.rollValue}{' '}
+                        {message.diceRoll.modifier > 0
+                          ? `+ ${message.diceRoll.modifier}`
+                          : message.diceRoll.modifier}
+                        )
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="text-xs font-serif font-bold">
+                    {message.diceRoll.outcome === 'critical_success' && (
+                      <span className="text-genshin-gold flex items-center gap-1">
+                        <Sparkles className="w-3.5 h-3.5 animate-spin" /> ¡Éxito Crítico!
+                      </span>
+                    )}
+                    {message.diceRoll.outcome === 'critical_failure' && (
+                      <span className="text-genshin-crimson flex items-center gap-1">
+                        <ShieldAlert className="w-3.5 h-3.5" /> ¡Pifia Crítica!
+                      </span>
+                    )}
+                    {message.diceRoll.outcome === 'success' && (
+                      <span className="text-emerald-400 flex items-center gap-1">
+                        <CheckCircle className="w-3.5 h-3.5" /> Éxito
+                      </span>
+                    )}
+                    {message.diceRoll.outcome === 'mixed' && (
+                      <span className="text-amber-300 flex items-center gap-1">
+                        <AlertCircle className="w-3.5 h-3.5" /> Matices
+                      </span>
+                    )}
+                    {message.diceRoll.outcome === 'failure' && (
+                      <span className="text-red-400">Fallo</span>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
+            )
           )}
 
           {/* Combined Card (Photos on top + Text caption underneath) */}
