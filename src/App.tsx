@@ -136,6 +136,21 @@ export const App: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const m = payload.new as any;
+          let parsedImages: string[] = [];
+          if (m.image_url) {
+            try {
+              if (m.image_url.startsWith('[') && m.image_url.endsWith(']')) {
+                parsedImages = JSON.parse(m.image_url);
+              } else {
+                parsedImages = [m.image_url];
+              }
+            } catch {
+              parsedImages = [m.image_url];
+            }
+          }
+
+          const isSecretMessage = m.character_vision === 'secret' || (m.content && m.content.includes('||'));
+
           const incomingMsg: Message = {
             id: m.id,
             roomId: m.room_id,
@@ -146,7 +161,9 @@ export const App: React.FC = () => {
             content: m.content || '',
             parsedBlocks: m.parsed_blocks || [],
             diceRoll: m.dice_roll || undefined,
-            imageUrl: m.image_url || undefined,
+            imageUrl: parsedImages.length > 0 ? parsedImages[0] : undefined,
+            imageUrls: parsedImages,
+            isSecret: isSecretMessage,
             timestamp: new Date(m.created_at).getTime(),
           };
 
@@ -241,21 +258,35 @@ export const App: React.FC = () => {
   }, [messages.length]);
 
   // Handlers
-  const handleSendMessage = async (content: string, expression: Expression, imageFile?: File) => {
+  const handleSendMessage = async (
+    content: string,
+    expression: Expression,
+    imageFiles?: File[] | File,
+    isSecret?: boolean
+  ) => {
     if (!currentRoom || !player) return;
 
-    let uploadedImageUrl: string | undefined = undefined;
+    const filesArray: File[] = imageFiles
+      ? Array.isArray(imageFiles)
+        ? imageFiles
+        : [imageFiles]
+      : [];
 
-    if (imageFile) {
-      const cloudUrl = await dbService.uploadImage(imageFile);
-      if (cloudUrl) {
-        uploadedImageUrl = cloudUrl;
-      } else {
-        uploadedImageUrl = await new Promise((res) => {
-          const reader = new FileReader();
-          reader.onload = (e) => res(e.target?.result as string);
-          reader.readAsDataURL(imageFile);
-        });
+    let uploadedImageUrls: string[] = [];
+
+    if (filesArray.length > 0) {
+      for (const file of filesArray) {
+        const cloudUrl = await dbService.uploadImage(file);
+        if (cloudUrl) {
+          uploadedImageUrls.push(cloudUrl);
+        } else {
+          const localUrl = await new Promise<string>((res) => {
+            const reader = new FileReader();
+            reader.onload = (e) => res(e.target?.result as string);
+            reader.readAsDataURL(file);
+          });
+          uploadedImageUrls.push(localUrl);
+        }
       }
     }
 
@@ -268,7 +299,9 @@ export const App: React.FC = () => {
       expression: expression,
       content: content,
       parsedBlocks: parseMessageContent(content),
-      imageUrl: uploadedImageUrl,
+      imageUrl: uploadedImageUrls.length > 0 ? uploadedImageUrls[0] : undefined,
+      imageUrls: uploadedImageUrls,
+      isSecret: isSecret || content.includes('||'),
       timestamp: Date.now(),
     };
 

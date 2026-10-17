@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Message, Expression } from '../types';
-import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle } from 'lucide-react';
+import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle, Eye, EyeOff, Lock, Unlock } from 'lucide-react';
+import { SoundEffects } from '../utils/sound';
 
 interface MessageItemProps {
   message: Message;
@@ -17,6 +18,9 @@ const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = 
 };
 
 export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick }) => {
+  const [isSecretRevealed, setIsSecretRevealed] = useState(false);
+  const [revealedBlockIndices, setRevealedBlockIndices] = useState<Record<number, boolean>>({});
+
   const expr = EXPRESSION_LABELS[message.expression] || EXPRESSION_LABELS.normal;
 
   const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
@@ -24,12 +28,32 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
     minute: '2-digit',
   });
 
+  const allImages: string[] = message.imageUrls && message.imageUrls.length > 0
+    ? message.imageUrls
+    : message.imageUrl
+    ? [message.imageUrl]
+    : [];
+
+  const handleToggleGlobalSecret = () => {
+    SoundEffects.playChime();
+    setIsSecretRevealed((prev) => !prev);
+  };
+
+  const handleToggleBlockSecret = (idx: number, e: React.MouseEvent) => {
+    e.stopPropagation();
+    SoundEffects.playChime();
+    setRevealedBlockIndices((prev) => ({
+      ...prev,
+      [idx]: !prev[idx],
+    }));
+  };
+
   return (
     <div className="relative group px-2 sm:px-4 py-2 transition-all">
       <div className="max-w-3xl mx-auto flex gap-2.5 sm:gap-3.5 items-start">
         {/* Avatar */}
         <div className="relative shrink-0 pt-1">
-          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border border-genshin-gold/40 p-0.5 bg-genshin-card shadow-md">
+          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border border-genshin-gold/40 p-0.5 bg-genshin-card shadow-md">
             <img
               src={message.senderAvatar}
               alt={message.senderName}
@@ -52,6 +76,14 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
               <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-genshin-panel/80 border border-slate-700 text-slate-300 flex items-center gap-1">
                 <span>{expr.emoji}</span>
                 <span>{expr.label}</span>
+              </span>
+            )}
+
+            {/* Secret Badge Indicator */}
+            {message.isSecret && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded-md bg-purple-950/60 text-purple-300 border border-purple-500/40 font-serif flex items-center gap-1">
+                <Lock className="w-2.5 h-2.5" />
+                <span>Secreto</span>
               </span>
             )}
 
@@ -132,48 +164,147 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
             </div>
           )}
 
-          {/* Parsed Message Blocks: Actions & Dialogue */}
-          <div className="space-y-1.5">
-            {message.parsedBlocks.map((block, idx) => {
-              if (block.type === 'action') {
-                return (
-                  <div
-                    key={idx}
-                    className="text-xs sm:text-[13px] text-amber-200/90 italic font-serif pl-3 py-1 border-l-2 border-genshin-gold/50 bg-gradient-to-r from-genshin-gold/10 to-transparent rounded-r-lg leading-relaxed"
-                  >
-                    *{block.text}*
-                  </div>
-                );
-              } else {
-                return (
-                  <div
-                    key={idx}
-                    className="relative bg-genshin-card/90 backdrop-blur-md rounded-2xl rounded-tl-sm p-3 border border-genshin-border/80 text-xs sm:text-sm text-slate-100 leading-relaxed shadow-sm font-sans"
-                  >
-                    <div className="absolute top-1.5 right-2 w-1.5 h-1.5 rotate-45 bg-genshin-gold/40" />
-                    {block.text}
-                  </div>
-                );
-              }
-            })}
-          </div>
-
-          {/* Attached Image (if any) */}
-          {message.imageUrl && (
-            <div className="mt-2.5">
+          {/* Combined Card (Photos on top + Text caption underneath) */}
+          <div className="relative rounded-2xl overflow-hidden bg-genshin-card/90 backdrop-blur-md border border-genshin-border/80 shadow-md">
+            {/* Global Secret Blur Overlay */}
+            {message.isSecret && !isSecretRevealed && (
               <div
-                onClick={() => onImageClick?.(message.imageUrl!)}
-                className="inline-block rounded-2xl overflow-hidden border border-genshin-gold/40 shadow-lg cursor-pointer hover:border-genshin-gold transition-all active:scale-[0.98] max-w-xs sm:max-w-sm"
+                onClick={handleToggleGlobalSecret}
+                className="absolute inset-0 z-20 backdrop-blur-xl bg-black/60 flex flex-col items-center justify-center p-4 cursor-pointer hover:bg-black/50 transition-all select-none"
               >
-                <img
-                  src={message.imageUrl}
-                  alt="Foto de la escena"
-                  className="w-full h-auto max-h-72 object-cover"
-                  loading="lazy"
-                />
+                <div className="p-3 rounded-full bg-genshin-panel/80 border border-genshin-gold/50 text-genshin-gold mb-2 shadow-lg animate-pulse">
+                  <Eye className="w-6 h-6" />
+                </div>
+                <span className="text-xs font-serif font-bold text-amber-100 tracking-wide text-center">
+                  Mensaje Secreto Difuminado
+                </span>
+                <span className="text-[10px] text-genshin-gold/90 mt-0.5">
+                  Toca para revelar el contenido
+                </span>
               </div>
-            </div>
-          )}
+            )}
+
+            {/* Gallery: 1, 2, or 3+ Photos stacked or grid */}
+            {allImages.length > 0 && (
+              <div
+                className={`overflow-hidden ${
+                  message.isSecret && !isSecretRevealed ? 'blur-lg scale-105' : ''
+                } transition-all duration-300`}
+              >
+                {allImages.length === 1 ? (
+                  /* Single Image */
+                  <div
+                    onClick={() => onImageClick?.(allImages[0])}
+                    className="cursor-pointer max-h-96 w-full overflow-hidden bg-black/40"
+                  >
+                    <img
+                      src={allImages[0]}
+                      alt="Foto de escena"
+                      className="w-full h-auto max-h-96 object-cover hover:scale-[1.02] transition-transform duration-300"
+                      loading="lazy"
+                    />
+                  </div>
+                ) : allImages.length === 2 ? (
+                  /* 2 Images: Side by Side */
+                  <div className="grid grid-cols-2 gap-1 bg-black/40 p-1">
+                    {allImages.map((img, i) => (
+                      <div
+                        key={i}
+                        onClick={() => onImageClick?.(img)}
+                        className="cursor-pointer h-48 sm:h-56 overflow-hidden rounded-lg bg-black/30"
+                      >
+                        <img
+                          src={img}
+                          alt={`Foto ${i + 1}`}
+                          className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                          loading="lazy"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  /* 3+ Images Collage: First image large, subsequent images below */
+                  <div className="space-y-1 bg-black/40 p-1">
+                    <div
+                      onClick={() => onImageClick?.(allImages[0])}
+                      className="cursor-pointer h-52 sm:h-64 overflow-hidden rounded-lg bg-black/30"
+                    >
+                      <img
+                        src={allImages[0]}
+                        alt="Foto principal"
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
+                      {allImages.slice(1).map((img, i) => (
+                        <div
+                          key={i}
+                          onClick={() => onImageClick?.(img)}
+                          className="cursor-pointer h-28 sm:h-36 overflow-hidden rounded-lg bg-black/30"
+                        >
+                          <img
+                            src={img}
+                            alt={`Foto secundaria ${i + 2}`}
+                            className="w-full h-full object-cover hover:scale-105 transition-transform duration-300"
+                            loading="lazy"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Text Caption directly under the photos */}
+            {message.parsedBlocks.length > 0 && (
+              <div
+                className={`p-3 space-y-2 ${
+                  message.isSecret && !isSecretRevealed ? 'blur-md select-none' : ''
+                } transition-all duration-300`}
+              >
+                {message.parsedBlocks.map((block, idx) => {
+                  if (block.type === 'action') {
+                    return (
+                      <div
+                        key={idx}
+                        className="text-xs sm:text-[13px] text-amber-200/90 italic font-serif pl-2.5 py-0.5 border-l-2 border-genshin-gold/50 bg-gradient-to-r from-genshin-gold/10 to-transparent rounded-r-lg leading-relaxed"
+                      >
+                        *{block.text}*
+                      </div>
+                    );
+                  } else if (block.type === 'secret') {
+                    /* Inline Secret block ||secret|| */
+                    const isRevealed = revealedBlockIndices[idx];
+                    return (
+                      <span
+                        key={idx}
+                        onClick={(e) => handleToggleBlockSecret(idx, e)}
+                        className={`inline-block my-0.5 mx-0.5 px-2 py-0.5 rounded-lg text-xs cursor-pointer transition-all ${
+                          isRevealed
+                            ? 'bg-purple-900/40 text-purple-200 border border-purple-500/50'
+                            : 'bg-slate-900/90 text-transparent blur-[4px] hover:blur-[2px] border border-slate-700 select-none'
+                        }`}
+                        title={isRevealed ? 'Toca para volver a ocultar' : 'Toca para revelar secreto'}
+                      >
+                        {block.text}
+                      </span>
+                    );
+                  } else {
+                    return (
+                      <div
+                        key={idx}
+                        className="text-xs sm:text-sm text-slate-100 leading-relaxed font-sans"
+                      >
+                        {block.text}
+                      </div>
+                    );
+                  }
+                })}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

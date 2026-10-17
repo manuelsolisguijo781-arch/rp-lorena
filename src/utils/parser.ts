@@ -1,9 +1,11 @@
 import { MessageBlock } from '../types';
 
 /**
- * Parses a message string containing actions wrapped in asterisks (*action*)
- * and spoken dialogues into an array of structured blocks.
- * Example: "*bruno le agarra la mano* Lorena ha sido un placer verte"
+ * Parses a message string containing:
+ * - *action* wrapped in asterisks
+ * - ||secret|| wrapped in double pipes (blurred spoiler / secret)
+ * - plain spoken dialogues
+ * Example: "*te acerca lentamente* ||susurro en tu oído algo prohibido|| ¿te ha gustado?"
  */
 export function parseMessageContent(rawContent: string): MessageBlock[] {
   if (!rawContent || !rawContent.trim()) {
@@ -11,13 +13,13 @@ export function parseMessageContent(rawContent: string): MessageBlock[] {
   }
 
   const blocks: MessageBlock[] = [];
-  // Regex matches *action text*
-  const actionRegex = /\*([^*]+)\*/g;
+  // Regex matches either *action* or ||secret||
+  const tokenRegex = /(\*([^*]+)\*|\|\|([^|]+)\|\|)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
 
-  while ((match = actionRegex.exec(rawContent)) !== null) {
-    // If there was text before this action, it's dialogue
+  while ((match = tokenRegex.exec(rawContent)) !== null) {
+    // If there was text before this token, it's dialogue
     if (match.index > lastIndex) {
       const dialogueText = rawContent.slice(lastIndex, match.index).trim();
       if (dialogueText) {
@@ -28,19 +30,30 @@ export function parseMessageContent(rawContent: string): MessageBlock[] {
       }
     }
 
-    // The action text
-    const actionText = match[1].trim();
-    if (actionText) {
-      blocks.push({
-        type: 'action',
-        text: actionText,
-      });
+    if (match[2]) {
+      // Asterisks -> Action
+      const actionText = match[2].trim();
+      if (actionText) {
+        blocks.push({
+          type: 'action',
+          text: actionText,
+        });
+      }
+    } else if (match[3]) {
+      // Double pipes -> Secret / Spoiler
+      const secretText = match[3].trim();
+      if (secretText) {
+        blocks.push({
+          type: 'secret',
+          text: secretText,
+        });
+      }
     }
 
-    lastIndex = actionRegex.lastIndex;
+    lastIndex = tokenRegex.lastIndex;
   }
 
-  // Any remaining dialogue after the last action
+  // Any remaining dialogue after the last match
   if (lastIndex < rawContent.length) {
     const trailingDialogue = rawContent.slice(lastIndex).trim();
     if (trailingDialogue) {
@@ -51,7 +64,7 @@ export function parseMessageContent(rawContent: string): MessageBlock[] {
     }
   }
 
-  // If no blocks were created (e.g. only asterisks with empty text), return full trimmed text as dialogue
+  // Fallback
   if (blocks.length === 0 && rawContent.trim()) {
     blocks.push({
       type: 'dialogue',

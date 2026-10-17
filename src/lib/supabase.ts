@@ -291,34 +291,60 @@ export const dbService = {
 
     if (error || !data) return [];
 
-    return data.map((m) => ({
-      id: m.id,
-      roomId: m.room_id,
-      senderId: m.character_id,
-      senderName: m.character_name,
-      senderAvatar: m.character_avatar || '',
-      expression: (m.expression || 'normal') as Expression,
-      content: m.content || '',
-      parsedBlocks: m.parsed_blocks || [],
-      diceRoll: (m.dice_roll as DiceRoll) || undefined,
-      imageUrl: m.image_url || undefined,
-      timestamp: new Date(m.created_at).getTime(),
-    }));
+    return data.map((m) => {
+      let parsedImages: string[] = [];
+      if (m.image_url) {
+        try {
+          if (m.image_url.startsWith('[') && m.image_url.endsWith(']')) {
+            parsedImages = JSON.parse(m.image_url);
+          } else {
+            parsedImages = [m.image_url];
+          }
+        } catch {
+          parsedImages = [m.image_url];
+        }
+      }
+
+      const isSecretMessage = m.character_vision === 'secret' || (m.content && m.content.includes('||'));
+
+      return {
+        id: m.id,
+        roomId: m.room_id,
+        senderId: m.character_id,
+        senderName: m.character_name,
+        senderAvatar: m.character_avatar || '',
+        expression: (m.expression || 'normal') as Expression,
+        content: m.content || '',
+        parsedBlocks: m.parsed_blocks || [],
+        diceRoll: (m.dice_roll as DiceRoll) || undefined,
+        imageUrl: parsedImages.length > 0 ? parsedImages[0] : undefined,
+        imageUrls: parsedImages,
+        isSecret: isSecretMessage,
+        timestamp: new Date(m.created_at).getTime(),
+      };
+    });
   },
 
   async insertMessage(message: Message): Promise<void> {
+    let storedImageUrl: string | null = null;
+    if (message.imageUrls && message.imageUrls.length > 0) {
+      storedImageUrl = JSON.stringify(message.imageUrls);
+    } else if (message.imageUrl) {
+      storedImageUrl = message.imageUrl;
+    }
+
     await supabase.from('messages').insert({
       id: message.id,
       room_id: message.roomId,
       character_id: message.senderId,
       character_name: message.senderName,
       character_avatar: message.senderAvatar,
-      character_vision: 'default',
+      character_vision: message.isSecret ? 'secret' : 'default',
       expression: message.expression,
       content: message.content,
       parsed_blocks: message.parsedBlocks,
       dice_roll: message.diceRoll || null,
-      image_url: message.imageUrl || null,
+      image_url: storedImageUrl,
       created_at: new Date(message.timestamp).toISOString(),
     });
   },

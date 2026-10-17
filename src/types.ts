@@ -25,7 +25,7 @@ export interface DiceRoll {
 }
 
 export interface MessageBlock {
-  type: 'action' | 'dialogue';
+  type: 'action' | 'dialogue' | 'secret';
   text: string;
 }
 
@@ -36,10 +36,12 @@ export interface Message {
   senderName: string;
   senderAvatar: string;
   expression: Expression;
-  content: string; // Raw text with *actions*
+  content: string; // Raw text with *actions* and ||secrets||
   parsedBlocks: MessageBlock[];
   diceRoll?: DiceRoll;
-  imageUrl?: string;
+  imageUrl?: string; // Single image or primary thumbnail
+  imageUrls?: string[]; // Multiple images attached to the message
+  isSecret?: boolean; // If true, the entire message / photos are blurred until tapped
   timestamp: number;
 }
 
