@@ -1,12 +1,10 @@
 import React, { useState, useRef } from 'react';
-import { Send, Image as ImageIcon, Dices, Smile, RefreshCw, X } from 'lucide-react';
-import { Character, Expression } from '../types';
+import { Send, Image as ImageIcon, Dices, Smile, X } from 'lucide-react';
+import { Player, Expression } from '../types';
 import { SoundEffects } from '../utils/sound';
 
 interface MessageInputProps {
-  characters: Character[];
-  activeCharacter: Character;
-  onSwitchCharacter: (character: Character) => void;
+  player: Player;
   onSendMessage: (content: string, expression: Expression, imageFile?: File) => void;
   onOpenDiceModal: () => void;
 }
@@ -21,9 +19,7 @@ const EXPRESSIONS: { type: Expression; emoji: string; label: string }[] = [
 ];
 
 export const MessageInput: React.FC<MessageInputProps> = ({
-  characters,
-  activeCharacter,
-  onSwitchCharacter,
+  player,
   onSendMessage,
   onOpenDiceModal,
 }) => {
@@ -82,12 +78,6 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
-  };
-
-  const handleToggleCharacter = () => {
-    SoundEffects.playChime();
-    const otherChar = characters.find((c) => c.id !== activeCharacter.id) || characters[0];
-    onSwitchCharacter(otherChar);
   };
 
   const handleInsertAsterisks = () => {
@@ -153,24 +143,19 @@ export const MessageInput: React.FC<MessageInputProps> = ({
         </div>
       )}
 
-      {/* Main Bar */}
+      {/* Main Input Bar */}
       <div className="max-w-3xl mx-auto flex items-end gap-2">
-        {/* Character Quick Switcher Button */}
-        <button
-          type="button"
-          onClick={handleToggleCharacter}
-          className="relative group shrink-0 p-1 rounded-2xl bg-genshin-panel border border-genshin-gold/40 hover:border-genshin-gold transition-all active:scale-95 shadow-sm"
-          title={`Hablar como ${activeCharacter.name} (Toca para cambiar)`}
+        {/* Current Player Avatar */}
+        <div
+          className="shrink-0 p-0.5 rounded-2xl bg-genshin-panel border border-genshin-gold/40 shadow-sm"
+          title={`Escribiendo como ${player.displayName}`}
         >
           <img
-            src={activeCharacter.avatarUrl}
-            alt={activeCharacter.name}
+            src={player.avatarUrl}
+            alt={player.displayName}
             className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl object-cover"
           />
-          <div className="absolute -bottom-1 -right-1 bg-genshin-dark rounded-full p-0.5 border border-genshin-gold text-genshin-gold">
-            <RefreshCw className="w-2.5 h-2.5" />
-          </div>
-        </button>
+        </div>
 
         {/* Input box with tools */}
         <div className="flex-1 bg-genshin-panel/80 rounded-2xl border border-genshin-border focus-within:border-genshin-gold/80 transition-all flex flex-col p-1.5 shadow-inner">
@@ -184,7 +169,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
             }}
             onKeyDown={handleKeyDown}
-            placeholder={`Escribe como ${activeCharacter.name}... (*acción* diálogo)`}
+            placeholder={`Escribe como ${player.displayName}... (*acción* diálogo)`}
             className="w-full bg-transparent px-2.5 py-1 text-xs sm:text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none max-h-28"
           />
 

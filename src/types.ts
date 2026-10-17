@@ -1,14 +1,13 @@
-export type VisionElement = 'Pyro' | 'Hydro' | 'Anemo' | 'Electro' | 'Dendro' | 'Cryo' | 'Geo';
-
 export type Expression = 'normal' | 'blush' | 'smirk' | 'surprised' | 'teasing' | 'serious';
 
-export interface Character {
+export interface Player {
   id: string;
-  name: string;
-  title: string;
+  username: string;
+  displayName: string;
   avatarUrl: string;
-  vision: VisionElement;
-  color: string;
+  bio: string;
+  password?: string;
+  createdAt: number;
 }
 
 export type DiceType = 'd20' | 'd100' | 'd12' | 'd10' | 'd8' | 'd6' | 'd4';
@@ -33,12 +32,11 @@ export interface MessageBlock {
 export interface Message {
   id: string;
   roomId: string;
-  characterId: string;
-  characterName: string;
-  characterAvatar: string;
-  characterVision: VisionElement;
+  senderId: string;
+  senderName: string;
+  senderAvatar: string;
   expression: Expression;
-  content: string; // Raw text
+  content: string; // Raw text with *actions*
   parsedBlocks: MessageBlock[];
   diceRoll?: DiceRoll;
   imageUrl?: string;
@@ -48,9 +46,10 @@ export interface Message {
 export interface Room {
   id: string;
   name: string;
-  location: string;
-  region: 'Mondstadt' | 'Liyue' | 'Inazuma' | 'Sumeru' | 'Fontaine' | 'Custom';
   description: string;
+  inviteCode: string;
+  createdBy: string;
+  members: string[]; // usernames of members in this room
   backgroundUrl: string;
   ambientType: 'tavern' | 'night' | 'rain' | 'fireplace';
   createdAt: number;

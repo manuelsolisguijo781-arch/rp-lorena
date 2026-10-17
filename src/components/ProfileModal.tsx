@@ -1,51 +1,44 @@
 import React, { useState } from 'react';
-import { X, User, Heart, Sparkles, Shield, Wand2, Award } from 'lucide-react';
-import { PlayerProfile } from '../lib/supabase';
-import { VisionElement } from '../types';
+import { X, User, Heart, Sparkles, Shield, Award, LogOut, Check } from 'lucide-react';
+import { Player } from '../types';
 import { SoundEffects } from '../utils/sound';
 
 interface ProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  activeProfile: PlayerProfile;
-  allProfiles: PlayerProfile[];
-  onSelectProfile: (profile: PlayerProfile) => void;
-  onSaveProfile: (profile: PlayerProfile) => void;
+  player: Player;
+  onSaveProfile: (updated: Player) => void;
+  onLogout: () => void;
   messageCount: number;
 }
-
-const VISIONS: { name: VisionElement; label: string; color: string }[] = [
-  { name: 'Pyro', label: 'Pyro (Fuego)', color: 'text-red-400 border-red-500/50 bg-red-500/20' },
-  { name: 'Cryo', label: 'Cryo (Hielo)', color: 'text-cyan-300 border-cyan-400/50 bg-cyan-500/20' },
-  { name: 'Electro', label: 'Electro (Rayo)', color: 'text-purple-300 border-purple-400/50 bg-purple-500/20' },
-  { name: 'Hydro', label: 'Hydro (Agua)', color: 'text-blue-300 border-blue-400/50 bg-blue-500/20' },
-  { name: 'Anemo', label: 'Anemo (Viento)', color: 'text-teal-300 border-teal-400/50 bg-teal-500/20' },
-  { name: 'Dendro', label: 'Dendro (Planta)', color: 'text-emerald-300 border-emerald-400/50 bg-emerald-500/20' },
-  { name: 'Geo', label: 'Geo (Tierra)', color: 'text-amber-300 border-amber-400/50 bg-amber-500/20' },
-];
 
 export const ProfileModal: React.FC<ProfileModalProps> = ({
   isOpen,
   onClose,
-  activeProfile,
-  allProfiles,
-  onSelectProfile,
+  player,
   onSaveProfile,
+  onLogout,
   messageCount,
 }) => {
-  const [formData, setFormData] = useState<PlayerProfile>(activeProfile);
+  const [displayName, setDisplayName] = useState(player.displayName);
+  const [bio, setBio] = useState(player.bio);
+  const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl);
   const [activeTab, setActiveTab] = useState<'profile' | 'stats'>('profile');
 
   if (!isOpen) return null;
 
-  // Affection / Romance level calculated from message counts
   const affectionLevel = Math.min(10, Math.floor(messageCount / 10) + 1);
   const affectionProgress = Math.min(100, ((messageCount % 10) / 10) * 100);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     SoundEffects.playCriticalSuccess();
-    onSaveProfile(formData);
+    onSaveProfile({
+      ...player,
+      displayName: displayName.trim() || player.username,
+      bio: bio.trim(),
+      avatarUrl: avatarUrl.trim() || player.avatarUrl,
+    });
     onClose();
   };
 
@@ -57,7 +50,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           <div className="flex items-center gap-2">
             <User className="w-5 h-5 text-genshin-gold" />
             <h2 className="text-base font-serif font-bold text-amber-100 tracking-wide">
-              Perfil & Personalización
+              Mi Perfil
             </h2>
           </div>
           <button
@@ -69,33 +62,6 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           >
             <X className="w-5 h-5" />
           </button>
-        </div>
-
-        {/* Profile Switcher Pills */}
-        <div className="px-4 pt-3 flex items-center gap-2">
-          {allProfiles.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => {
-                SoundEffects.playChime();
-                onSelectProfile(p);
-                setFormData(p);
-              }}
-              className={`flex-1 py-2 px-3 rounded-xl text-xs font-serif font-bold flex items-center justify-center gap-2 border transition-all ${
-                activeProfile.id === p.id
-                  ? 'bg-genshin-gold/20 border-genshin-gold text-genshin-gold shadow-sm'
-                  : 'bg-genshin-panel/50 border-slate-700 text-slate-400 hover:text-slate-200'
-              }`}
-            >
-              <img
-                src={p.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                alt={p.display_name}
-                className="w-5 h-5 rounded-full object-cover"
-              />
-              <span className="truncate">{p.display_name || p.username}</span>
-            </button>
-          ))}
         </div>
 
         {/* Level & Vínculo Banner */}
@@ -117,7 +83,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
           </div>
         </div>
 
-        {/* Tabs: Perfil vs Atributos D&D */}
+        {/* Tabs */}
         <div className="flex border-b border-slate-700/60 mx-4 mt-3 text-xs">
           <button
             type="button"
@@ -129,7 +95,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Datos de Personaje</span>
+            <span>Datos Personales</span>
           </button>
           <button
             type="button"
@@ -151,14 +117,23 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             <form id="profileForm" onSubmit={handleSubmit} className="space-y-3.5 text-xs">
               <div>
                 <label className="text-[11px] text-genshin-gold font-medium block mb-1">
-                  Nombre en el Rol / Apodo
+                  Nombre de Usuario (Login)
+                </label>
+                <div className="px-3 py-2 rounded-xl bg-genshin-dark/60 border border-slate-800 text-slate-400 font-mono text-xs">
+                  @{player.username}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-[11px] text-genshin-gold font-medium block mb-1">
+                  Nombre para mostrar / Apodo en el rol
                 </label>
                 <input
                   type="text"
                   required
-                  value={formData.display_name}
-                  onChange={(e) => setFormData({ ...formData, display_name: e.target.value })}
-                  placeholder="Tu nombre o apodo"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder="Tu nombre en el rol"
                   className="w-full px-3 py-2 rounded-xl bg-genshin-panel border border-slate-700 text-slate-100 focus:border-genshin-gold focus:outline-none"
                 />
               </div>
@@ -169,9 +144,9 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={formData.bio}
-                  onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  placeholder="Ej: Dama de las Estrellas de Liyue"
+                  value={bio}
+                  onChange={(e) => setBio(e.target.value)}
+                  placeholder="Ej: Hechicera solitaria, Viajero errante..."
                   className="w-full px-3 py-2 rounded-xl bg-genshin-panel border border-slate-700 text-slate-100 focus:border-genshin-gold focus:outline-none"
                 />
               </div>
@@ -182,8 +157,8 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                 </label>
                 <input
                   type="url"
-                  value={formData.avatar_url}
-                  onChange={(e) => setFormData({ ...formData, avatar_url: e.target.value })}
+                  value={avatarUrl}
+                  onChange={(e) => setAvatarUrl(e.target.value)}
                   placeholder="https://..."
                   className="w-full px-3 py-2 rounded-xl bg-genshin-panel border border-slate-700 text-slate-100 focus:border-genshin-gold focus:outline-none"
                 />
@@ -192,14 +167,30 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
               {/* Avatar Preview */}
               <div className="flex items-center gap-3 p-2.5 rounded-2xl bg-genshin-panel/50 border border-slate-700/60">
                 <img
-                  src={formData.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                  src={avatarUrl}
                   alt="Vista previa"
                   className="w-12 h-12 rounded-xl object-cover border border-genshin-gold/50 shadow-md"
                 />
                 <div>
-                  <div className="font-serif font-bold text-amber-100">{formData.display_name}</div>
-                  <div className="text-[11px] text-slate-400">{formData.bio || 'Sin título'}</div>
+                  <div className="font-serif font-bold text-amber-100">{displayName}</div>
+                  <div className="text-[11px] text-slate-400">{bio || 'Sin descripción'}</div>
                 </div>
+              </div>
+
+              {/* Logout button */}
+              <div className="pt-2 border-t border-slate-700/60">
+                <button
+                  type="button"
+                  onClick={() => {
+                    SoundEffects.playChime();
+                    onLogout();
+                    onClose();
+                  }}
+                  className="w-full py-2 rounded-xl bg-red-950/30 hover:bg-red-950/60 text-red-400 border border-red-900/40 text-xs font-serif font-bold flex items-center justify-center gap-2 transition-all"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Cerrar Sesión</span>
+                </button>
               </div>
             </form>
           ) : (
@@ -210,7 +201,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
                   <span>Modificadores de Tirada Automáticos</span>
                 </div>
                 <p className="text-[11px] leading-relaxed">
-                  Estos atributos otorgan bonificadores naturales cuando lanzas dados en el rol:
+                  Estos atributos otorgan bonificadores naturales a tus tiradas de dados:
                 </p>
                 <div className="grid grid-cols-2 gap-2 pt-1 font-mono">
                   <div className="p-2 rounded-xl bg-genshin-dark border border-slate-800 flex justify-between items-center">
@@ -242,7 +233,7 @@ export const ProfileModal: React.FC<ProfileModalProps> = ({
             form="profileForm"
             className="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-600 to-yellow-600 text-amber-950 font-serif font-bold text-xs uppercase tracking-wider shadow-genshin-gold hover:brightness-110 active:scale-95 transition-all"
           >
-            Guardar Perfil
+            Guardar Cambios
           </button>
         </div>
       </div>

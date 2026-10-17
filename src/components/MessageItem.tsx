@@ -1,21 +1,11 @@
 import React from 'react';
-import { Message, Expression, VisionElement } from '../types';
+import { Message, Expression } from '../types';
 import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle } from 'lucide-react';
 
 interface MessageItemProps {
   message: Message;
   onImageClick?: (imageUrl: string) => void;
 }
-
-const VISION_COLORS: Record<VisionElement, { bg: string; text: string; border: string; glow: string }> = {
-  Pyro: { bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/50', glow: 'shadow-red-500/30' },
-  Cryo: { bg: 'bg-cyan-500/20', text: 'text-cyan-300', border: 'border-cyan-400/50', glow: 'shadow-cyan-400/30' },
-  Hydro: { bg: 'bg-blue-500/20', text: 'text-blue-400', border: 'border-blue-400/50', glow: 'shadow-blue-400/30' },
-  Anemo: { bg: 'bg-teal-500/20', text: 'text-teal-300', border: 'border-teal-400/50', glow: 'shadow-teal-400/30' },
-  Electro: { bg: 'bg-purple-500/20', text: 'text-purple-300', border: 'border-purple-400/50', glow: 'shadow-purple-400/30' },
-  Dendro: { bg: 'bg-emerald-500/20', text: 'text-emerald-300', border: 'border-emerald-400/50', glow: 'shadow-emerald-400/30' },
-  Geo: { bg: 'bg-amber-500/20', text: 'text-amber-400', border: 'border-amber-400/50', glow: 'shadow-amber-400/30' },
-};
 
 const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = {
   normal: { label: 'Normal', emoji: '✨' },
@@ -27,7 +17,6 @@ const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = 
 };
 
 export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick }) => {
-  const visionStyle = VISION_COLORS[message.characterVision] || VISION_COLORS.Pyro;
   const expr = EXPRESSION_LABELS[message.expression] || EXPRESSION_LABELS.normal;
 
   const formattedTime = new Date(message.timestamp).toLocaleTimeString([], {
@@ -38,32 +27,24 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
   return (
     <div className="relative group px-2 sm:px-4 py-2 transition-all">
       <div className="max-w-3xl mx-auto flex gap-2.5 sm:gap-3.5 items-start">
-        {/* Character Portrait / Avatar */}
+        {/* Avatar */}
         <div className="relative shrink-0 pt-1">
-          <div
-            className={`w-11 h-11 sm:w-13 sm:h-13 rounded-2xl overflow-hidden border-2 p-0.5 bg-genshin-card shadow-md ${visionStyle.border} ${visionStyle.glow}`}
-          >
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl overflow-hidden border border-genshin-gold/40 p-0.5 bg-genshin-card shadow-md">
             <img
-              src={message.characterAvatar}
-              alt={message.characterName}
+              src={message.senderAvatar}
+              alt={message.senderName}
               className="w-full h-full object-cover rounded-xl"
               loading="lazy"
             />
           </div>
-          {/* Vision badge */}
-          <span
-            className={`absolute -bottom-1 -right-1 text-[9px] font-bold px-1 rounded-md border ${visionStyle.bg} ${visionStyle.text} ${visionStyle.border} backdrop-blur-sm`}
-          >
-            {message.characterVision.substring(0, 3)}
-          </span>
         </div>
 
         {/* Message Content Container */}
         <div className="flex-1 min-w-0">
-          {/* Header row: Character Name, Expression, Timestamp */}
+          {/* Header row: Sender Name, Expression, Timestamp */}
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <span className="font-serif font-bold text-xs sm:text-sm text-genshin-gold tracking-wide">
-              {message.characterName}
+              {message.senderName}
             </span>
 
             {/* Expression Pill */}
@@ -169,7 +150,6 @@ export const MessageItem: React.FC<MessageItemProps> = ({ message, onImageClick 
                     key={idx}
                     className="relative bg-genshin-card/90 backdrop-blur-md rounded-2xl rounded-tl-sm p-3 border border-genshin-border/80 text-xs sm:text-sm text-slate-100 leading-relaxed shadow-sm font-sans"
                   >
-                    {/* Subtle Genshin diamond corner accent */}
                     <div className="absolute top-1.5 right-2 w-1.5 h-1.5 rotate-45 bg-genshin-gold/40" />
                     {block.text}
                   </div>

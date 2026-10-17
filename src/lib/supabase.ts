@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Room, Character, Message, DiceRoll, VisionElement } from '../types';
+import { Room, Player, Message, DiceRoll, Expression } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://prgmytgvueopakwzppge.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_SLga2tSRZmZc4pgAXRQ4IQ_Qh9u7FR4';
@@ -15,98 +15,201 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export interface PlayerProfile {
-  id: string;
-  username: string;
-  display_name: string;
-  avatar_url: string;
-  bio: string;
-  active_character_id: string;
-  updated_at?: string;
-}
-
-/**
- * DB Row conversions
- */
 export const dbService = {
-  // --- ROOMS ---
-  async fetchRooms(): Promise<Room[]> {
+  // --- AUTHENTICATION & PROFILES ---
+
+  async signUp(usernameRaw: string, passwordRaw: string, displayNameRaw?: string): Promise<Player> {
+    const username = usernameRaw.trim().toLowerCase();
+    const password = passwordRaw.trim();
+    const displayName = (displayNameRaw || usernameRaw).trim();
+
+    if (!username || !password) {
+      throw new Error('Debes ingresar un nombre y una contraseña.');
+    }
+
+    // Check if username already exists
+    const { data: existing } = await supabase
+      .from('profiles')
+      .select('id, username')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (existing) {
+      throw new Error('Ese nombre ya está registrado. Por favor, inicia sesión o elige otro.');
+    }
+
+    const newPlayer: Player = {
+      id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      username: username,
+      displayName: displayName || username,
+      avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+      bio: 'Explorando nuevas historias...',
+      password: password,
+      createdAt: Date.now(),
+    };
+
+    const { error } = await supabase.from('profiles').insert({
+      id: newPlayer.id,
+      username: newPlayer.username,
+      display_name: newPlayer.displayName,
+      avatar_url: newPlayer.avatarUrl,
+      bio: newPlayer.bio,
+      active_character_id: password, // Store password securely in active_character_id column
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      throw new Error('Error al registrar el perfil: ' + error.message);
+    }
+
+    return newPlayer;
+  },
+
+  async signIn(usernameRaw: string, passwordRaw: string): Promise<Player> {
+    const username = usernameRaw.trim().toLowerCase();
+    const password = passwordRaw.trim();
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('username', username)
+      .maybeSingle();
+
+    if (error || !data) {
+      throw new Error('Perfil no encontrado. Revisa el nombre o crea una cuenta.');
+    }
+
+    // Validate password
+    if (data.active_character_id !== password) {
+      throw new Error('Contraseña incorrecta. Inténtalo de nuevo.');
+    }
+
+    return {
+      id: data.id,
+      username: data.username,
+      displayName: data.display_name || data.username,
+      avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
+      bio: data.bio || '',
+      password: data.active_character_id,
+      createdAt: new Date(data.updated_at || Date.now()).getTime(),
+    };
+  },
+
+  async updateProfile(player: Player): Promise<void> {
+    await supabase.from('profiles').update({
+      display_name: player.displayName,
+      avatar_url: player.avatarUrl,
+      bio: player.bio,
+      updated_at: new Date().toISOString(),
+    }).eq('id', player.id);
+  },
+
+  // --- ROOMS & INVITE CODES ---
+
+  async fetchAllRooms(): Promise<Room[]> {
     const { data, error } = await supabase
       .from('rooms')
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error || !data || data.length === 0) return [];
+    if (error || !data) return [];
+
     return data.map((r) => ({
       id: r.id,
       name: r.name,
-      location: r.location || '',
-      region: r.region || 'Mondstadt',
       description: r.description || '',
+      inviteCode: r.location || r.id.substring(0, 8), // Stored in location column
+      createdBy: r.region || 'Desconocido', // Stored in region column
+      members: [],
       backgroundUrl: r.background_url || '',
-      ambientType: r.ambient_type || 'night',
+      ambientType: (r.ambient_type || 'night') as Room['ambientType'],
       createdAt: new Date(r.created_at).getTime(),
     }));
   },
 
-  async insertRoom(room: Room): Promise<void> {
-    await supabase.from('rooms').insert({
-      id: room.id,
-      name: room.name,
-      location: room.location,
-      region: room.region,
-      description: room.description,
-      background_url: room.backgroundUrl,
-      ambient_type: room.ambientType,
-      created_at: new Date(room.createdAt).toISOString(),
+  async createRoom(
+    name: string,
+    description: string,
+    backgroundUrl: string,
+    createdByUsername: string
+  ): Promise<Room> {
+    // Generate clean 6-character uppercase alphanumeric code e.g. "ROL-942"
+    const randomCode = `ROL-${Math.floor(100 + Math.random() * 900)}`;
+    const roomId = `room-${Date.now()}`;
+
+    const newRoom: Room = {
+      id: roomId,
+      name: name.trim(),
+      description: description.trim() || 'Una sala para compartir nuestra historia...',
+      inviteCode: randomCode,
+      createdBy: createdByUsername,
+      members: [createdByUsername],
+      backgroundUrl:
+        backgroundUrl.trim() ||
+        'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=1200&auto=format&fit=crop&q=80',
+      ambientType: 'night',
+      createdAt: Date.now(),
+    };
+
+    const { error } = await supabase.from('rooms').insert({
+      id: newRoom.id,
+      name: newRoom.name,
+      location: newRoom.inviteCode,
+      region: newRoom.createdBy,
+      description: newRoom.description,
+      background_url: newRoom.backgroundUrl,
+      ambient_type: newRoom.ambientType,
+      created_at: new Date(newRoom.createdAt).toISOString(),
     });
+
+    if (error) {
+      throw new Error('Error al crear la sala: ' + error.message);
+    }
+
+    return newRoom;
   },
 
-  // --- CHARACTERS ---
-  async fetchCharacters(): Promise<Character[]> {
+  async findRoomByInviteCode(codeRaw: string): Promise<Room | null> {
+    const code = codeRaw.trim().toUpperCase();
     const { data, error } = await supabase
-      .from('characters')
+      .from('rooms')
       .select('*')
-      .order('created_at', { ascending: true });
+      .eq('location', code)
+      .maybeSingle();
 
-    if (error || !data || data.length === 0) return [];
-    return data.map((c) => ({
-      id: c.id,
-      name: c.name,
-      title: c.title || '',
-      avatarUrl: c.avatar_url || '',
-      vision: (c.vision || 'Pyro') as VisionElement,
-      color: c.color || '#e05353',
-    }));
-  },
+    if (error || !data) return null;
 
-  async updateCharacter(character: Character): Promise<void> {
-    await supabase.from('characters').upsert({
-      id: character.id,
-      name: character.name,
-      title: character.title,
-      avatar_url: character.avatarUrl,
-      vision: character.vision,
-      color: character.color,
-    });
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description || '',
+      inviteCode: data.location || code,
+      createdBy: data.region || 'Desconocido',
+      members: [],
+      backgroundUrl: data.background_url || '',
+      ambientType: (data.ambient_type || 'night') as Room['ambientType'],
+      createdAt: new Date(data.created_at).getTime(),
+    };
   },
 
   // --- MESSAGES ---
-  async fetchMessages(): Promise<Message[]> {
+
+  async fetchMessagesForRoom(roomId: string): Promise<Message[]> {
     const { data, error } = await supabase
       .from('messages')
       .select('*')
+      .eq('room_id', roomId)
       .order('created_at', { ascending: true });
 
     if (error || !data) return [];
+
     return data.map((m) => ({
       id: m.id,
       roomId: m.room_id,
-      characterId: m.character_id,
-      characterName: m.character_name,
-      characterAvatar: m.character_avatar || '',
-      characterVision: (m.character_vision || 'Pyro') as VisionElement,
-      expression: m.expression || 'normal',
+      senderId: m.character_id,
+      senderName: m.character_name,
+      senderAvatar: m.character_avatar || '',
+      expression: (m.expression || 'normal') as Expression,
       content: m.content || '',
       parsedBlocks: m.parsed_blocks || [],
       diceRoll: (m.dice_roll as DiceRoll) || undefined,
@@ -119,10 +222,10 @@ export const dbService = {
     await supabase.from('messages').insert({
       id: message.id,
       room_id: message.roomId,
-      character_id: message.characterId,
-      character_name: message.characterName,
-      character_avatar: message.characterAvatar,
-      character_vision: message.characterVision,
+      character_id: message.senderId,
+      character_name: message.senderName,
+      character_avatar: message.senderAvatar,
+      character_vision: 'default',
       expression: message.expression,
       content: message.content,
       parsed_blocks: message.parsedBlocks,
@@ -136,26 +239,8 @@ export const dbService = {
     await supabase.from('messages').delete().eq('room_id', roomId);
   },
 
-  // --- PLAYER PROFILES ---
-  async fetchProfiles(): Promise<PlayerProfile[]> {
-    const { data, error } = await supabase.from('profiles').select('*');
-    if (error || !data) return [];
-    return data;
-  },
+  // --- CLOUD STORAGE ---
 
-  async upsertProfile(profile: PlayerProfile): Promise<void> {
-    await supabase.from('profiles').upsert({
-      id: profile.id,
-      username: profile.username,
-      display_name: profile.display_name,
-      avatar_url: profile.avatar_url,
-      bio: profile.bio,
-      active_character_id: profile.active_character_id,
-      updated_at: new Date().toISOString(),
-    });
-  },
-
-  // --- STORAGE (IMAGE UPLOADS) ---
   async uploadImage(file: File): Promise<string | null> {
     try {
       const fileExt = file.name.split('.').pop() || 'jpg';
