@@ -172,10 +172,21 @@ export const App: React.FC = () => {
             timestamp: new Date(m.created_at).getTime(),
           };
 
-          // Only process message if it belongs to one of user's active rooms
-          const isMemberOfRoom = roomsRef.current.some((r) => r.id === incomingMsg.roomId);
-          if (!isMemberOfRoom && incomingMsg.roomId !== currentRoomId) {
-            return;
+          // ── CRITICAL FIX: only show messages belonging to the room the user is viewing.
+          // Messages from other rooms (that the user is also a member of) must NOT be mixed in.
+          // When the user switches rooms, messages load fresh from the DB (see the currentRoomId useEffect).
+          const currentRoomIdSnapshot = currentRoomId;
+          if (incomingMsg.roomId !== currentRoomIdSnapshot) {
+            // Still send a notification if the user is a member of that room and it's from someone else
+            const isMemberOfRoom = roomsRef.current.some((r) => r.id === incomingMsg.roomId);
+            if (isMemberOfRoom && m.character_id !== currentPlayer.id) {
+              notificationService.notify(
+                incomingMsg.senderName,
+                incomingMsg.content || (incomingMsg.imageUrl ? '📷 Te ha enviado una foto' : '🎲 Ha lanzado los dados'),
+                incomingMsg.senderAvatar
+              );
+            }
+            return; // Do NOT add to messages state — wrong room
           }
 
           setMessages((prev) => {
@@ -183,7 +194,7 @@ export const App: React.FC = () => {
             return [...prev, incomingMsg];
           });
 
-          // Trigger mobile notification & vibration if message is from the other person
+          // Notify only if message is from the other person
           if (m.character_id !== currentPlayer.id) {
             notificationService.notify(
               incomingMsg.senderName,
