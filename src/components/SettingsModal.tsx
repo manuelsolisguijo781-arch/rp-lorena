@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Download, Shield, Trash2, FileText, LogOut } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Download, Shield, Trash2, FileText, LogOut, Wallpaper, Upload } from 'lucide-react';
 import { Room, Message, Player } from '../types';
 import { SoundEffects } from '../utils/sound';
 
@@ -12,6 +12,7 @@ interface SettingsModalProps {
   onClearRoomHistory: (roomId: string) => void;
   onLeaveRoom?: (roomId: string) => void;
   onLogout: () => void;
+  onUploadBackground?: (file: File) => Promise<void>;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -23,9 +24,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearRoomHistory,
   onLeaveRoom,
   onLogout,
+  onUploadBackground,
 }) => {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [isUploadingBg, setIsUploadingBg] = useState(false);
+  const bgInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
 
@@ -74,6 +78,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     URL.revokeObjectURL(url);
   };
 
+  const handleBgChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !onUploadBackground) return;
+    try {
+      setIsUploadingBg(true);
+      await onUploadBackground(file);
+      SoundEffects.playCriticalSuccess();
+    } finally {
+      setIsUploadingBg(false);
+      if (bgInputRef.current) bgInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 bg-black/75 backdrop-blur-sm animate-fadeIn">
       <div className="w-full max-w-md bg-genshin-card border border-genshin-gold/50 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -98,6 +115,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Content */}
         <div className="p-4 overflow-y-auto space-y-4">
+          {/* Room Background Settings */}
+          {currentRoom && onUploadBackground && (
+            <div className="p-3.5 rounded-2xl bg-genshin-panel/60 border border-slate-700/80 space-y-2.5">
+              <div className="flex items-center gap-2 text-xs font-serif font-bold text-genshin-gold">
+                <Wallpaper className="w-4 h-4" />
+                <span>Fondo del Chat de la Sala</span>
+              </div>
+              <p className="text-[11px] text-slate-300 leading-relaxed">
+                Cambia el fondo de pantalla de <strong>{currentRoom.name}</strong> subiendo una foto directamente desde la galería de tu móvil o PC.
+              </p>
+              {currentRoom.backgroundUrl && (
+                <div className="h-20 w-full rounded-xl overflow-hidden border border-slate-700 relative">
+                  <img src={currentRoom.backgroundUrl} alt="Fondo actual" className="w-full h-full object-cover" />
+                  <span className="absolute bottom-1 right-2 text-[9px] bg-black/70 px-1.5 py-0.5 rounded text-slate-300 font-mono">Fondo actual</span>
+                </div>
+              )}
+              <input
+                ref={bgInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleBgChange}
+                className="hidden"
+              />
+              <button
+                type="button"
+                onClick={() => bgInputRef.current?.click()}
+                disabled={isUploadingBg}
+                className="w-full py-2.5 rounded-xl bg-genshin-card hover:bg-genshin-border text-genshin-gold border border-genshin-gold/40 text-xs font-serif font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-sm disabled:opacity-50"
+              >
+                <Upload className="w-4 h-4" />
+                <span>{isUploadingBg ? 'Subiendo imagen...' : 'Elegir foto de mi galería'}</span>
+              </button>
+            </div>
+          )}
+
           {/* Export Story */}
           {currentRoom && (
             <div className="p-3.5 rounded-2xl bg-genshin-panel/60 border border-slate-700/80 space-y-2">

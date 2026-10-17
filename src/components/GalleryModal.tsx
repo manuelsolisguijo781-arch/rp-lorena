@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Images, Calendar, User, Download, ExternalLink, Sparkles } from 'lucide-react';
+import { X, Images, Wallpaper, Sparkles } from 'lucide-react';
 import { Message, Room } from '../types';
 import { SoundEffects } from '../utils/sound';
 
@@ -9,6 +9,7 @@ interface GalleryModalProps {
   room: Room | null;
   messages: Message[];
   onImageClick?: (url: string) => void;
+  onSetRoomBackground?: (url: string) => void;
 }
 
 interface GalleryItem {
@@ -26,8 +27,10 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   room,
   messages,
   onImageClick,
+  onSetRoomBackground,
 }) => {
   const [filterSender, setFilterSender] = useState<string>('all');
+  const [settingBg, setSettingBg] = useState<string | null>(null);
 
   if (!isOpen || !room) return null;
 
@@ -36,29 +39,42 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
   messages.forEach((msg) => {
     if (msg.roomId !== room.id) return;
 
-    const urls = msg.imageUrls && msg.imageUrls.length > 0
-      ? msg.imageUrls
-      : msg.imageUrl
-      ? [msg.imageUrl]
-      : [];
+    const urls =
+      msg.imageUrls && msg.imageUrls.length > 0
+        ? msg.imageUrls
+        : msg.imageUrl
+        ? [msg.imageUrl]
+        : [];
 
     urls.forEach((url, idx) => {
       allGalleryItems.push({
         id: `${msg.id}-${idx}`,
-        url: url,
+        url,
         senderName: msg.senderName,
         senderAvatar: msg.senderAvatar,
-        caption: msg.content.replace(/\*([^*]+)\*/g, '').replace(/\|\|([^|]+)\|\|/g, '').trim() || undefined,
+        caption:
+          msg.content
+            .replace(/\*([^*]+)\*/g, '')
+            .replace(/\|\|([^|]+)\|\|/g, '')
+            .replace(/\(([^)]+)\)/g, '')
+            .trim() || undefined,
         timestamp: msg.timestamp,
       });
     });
   });
 
-  // Filter if selected
   const senders = Array.from(new Set(allGalleryItems.map((item) => item.senderName)));
-  const filteredItems = filterSender === 'all'
-    ? allGalleryItems
-    : allGalleryItems.filter((item) => item.senderName === filterSender);
+  const filteredItems =
+    filterSender === 'all'
+      ? allGalleryItems
+      : allGalleryItems.filter((item) => item.senderName === filterSender);
+
+  const handleSetBackground = async (url: string) => {
+    SoundEffects.playCriticalSuccess();
+    setSettingBg(url);
+    await onSetRoomBackground?.(url);
+    setTimeout(() => setSettingBg(null), 1500);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -77,7 +93,7 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">
-                Todas las fotos y escenas compartidas en <strong>{room.name}</strong>
+                Toca una foto para verla · <span className="text-genshin-gold/70">🖼️ úsala como fondo del chat</span>
               </p>
             </div>
           </div>
@@ -134,34 +150,72 @@ export const GalleryModal: React.FC<GalleryModalProps> = ({
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {filteredItems.map((item) => (
-                <div
-                  key={item.id}
-                  onClick={() => {
-                    SoundEffects.playChime();
-                    onImageClick?.(item.url);
-                  }}
-                  className="group relative rounded-2xl overflow-hidden border border-slate-700/80 hover:border-genshin-gold bg-black/40 cursor-pointer shadow-md transition-all active:scale-95"
-                >
-                  <div className="aspect-square w-full overflow-hidden">
-                    <img
-                      src={item.url}
-                      alt={item.caption || 'Recuerdo de rol'}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                      loading="lazy"
-                    />
+              {filteredItems.map((item) => {
+                const isSettingThis = settingBg === item.url;
+                return (
+                  <div
+                    key={item.id}
+                    className="group relative rounded-2xl overflow-hidden border border-slate-700/80 hover:border-genshin-gold bg-black/40 shadow-md transition-all"
+                  >
+                    {/* Photo */}
+                    <div
+                      className="aspect-square w-full overflow-hidden cursor-pointer"
+                      onClick={() => {
+                        SoundEffects.playChime();
+                        onImageClick?.(item.url);
+                      }}
+                    >
+                      <img
+                        src={item.url}
+                        alt={item.caption || 'Recuerdo de rol'}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    </div>
+
+                    {/* Set as Background button — appears on hover */}
+                    {onSetRoomBackground && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSetBackground(item.url);
+                        }}
+                        className={`absolute top-1.5 right-1.5 flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold transition-all shadow-lg active:scale-95 ${
+                          isSettingThis
+                            ? 'bg-emerald-500 text-white scale-105'
+                            : 'bg-black/70 text-genshin-gold border border-genshin-gold/50 opacity-0 group-hover:opacity-100 hover:bg-genshin-gold hover:text-amber-950'
+                        }`}
+                        title="Usar como fondo del chat"
+                      >
+                        {isSettingThis ? (
+                          <>
+                            <Sparkles className="w-3 h-3" />
+                            ¡Puesto!
+                          </>
+                        ) : (
+                          <>
+                            <Wallpaper className="w-3 h-3" />
+                            Fondo
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* Bottom info bar */}
+                    <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between text-[10px]">
+                      <span className="font-serif font-bold text-amber-200 truncate max-w-[90px]">
+                        {item.senderName}
+                      </span>
+                      <span className="font-mono text-slate-400 text-[9px]">
+                        {new Date(item.timestamp).toLocaleDateString([], {
+                          day: '2-digit',
+                          month: '2-digit',
+                        })}
+                      </span>
+                    </div>
                   </div>
-                  {/* Subtle bottom gradient with author */}
-                  <div className="absolute inset-x-0 bottom-0 p-2 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex items-center justify-between text-[10px]">
-                    <span className="font-serif font-bold text-amber-200 truncate max-w-[90px]">
-                      {item.senderName}
-                    </span>
-                    <span className="font-mono text-slate-400 text-[9px]">
-                      {new Date(item.timestamp).toLocaleDateString([], { day: '2-digit', month: '2-digit' })}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

@@ -410,6 +410,30 @@ export const App: React.FC = () => {
     await supabase.from('rooms').update({ description: newContext }).eq('id', currentRoom.id);
   };
 
+  const handleSetRoomBackground = async (imageUrl: string) => {
+    if (!currentRoom) return;
+    const updatedRoom = { ...currentRoom, backgroundUrl: imageUrl };
+    setRooms((prev) => prev.map((r) => (r.id === currentRoom.id ? updatedRoom : r)));
+    await supabase.from('rooms').update({ background_url: imageUrl }).eq('id', currentRoom.id);
+  };
+
+  const handleUploadRoomBackground = async (file: File) => {
+    if (!currentRoom) return;
+    const cloudUrl = await dbService.uploadImage(file);
+    if (cloudUrl) {
+      await handleSetRoomBackground(cloudUrl);
+    } else {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        const dataUrl = e.target?.result as string;
+        if (dataUrl) {
+          await handleSetRoomBackground(dataUrl);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleOpenCharacterSheet = async (senderId?: string) => {
     if (!player) return;
     if (!senderId || senderId === player.id) {
@@ -610,6 +634,7 @@ export const App: React.FC = () => {
       <PhotoModal
         imageUrl={selectedPhotoUrl}
         onClose={() => setSelectedPhotoUrl(null)}
+        onSetBackground={handleSetRoomBackground}
       />
 
       {/* Player Profile & Customization Modal */}
@@ -656,6 +681,7 @@ export const App: React.FC = () => {
         onClearRoomHistory={handleClearRoomHistory}
         onLeaveRoom={handleLeaveRoom}
         onLogout={handleLogout}
+        onUploadBackground={handleUploadRoomBackground}
       />
 
       {/* Room Photo Gallery Modal */}
@@ -665,6 +691,7 @@ export const App: React.FC = () => {
         room={currentRoom}
         messages={messages}
         onImageClick={(url) => setSelectedPhotoUrl(url)}
+        onSetRoomBackground={handleSetRoomBackground}
       />
 
       {/* Character Sheet / Outfit / Condition Modal */}

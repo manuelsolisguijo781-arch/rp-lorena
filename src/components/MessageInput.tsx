@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Send, Image as ImageIcon, Dices, Smile, X, Plus, EyeOff, Lock, Unlock } from 'lucide-react';
+import { Send, Image as ImageIcon, Dices, X, Plus, EyeOff, Lock, Unlock } from 'lucide-react';
 import { Player, Expression } from '../types';
 import { SoundEffects } from '../utils/sound';
 
@@ -9,23 +9,12 @@ interface MessageInputProps {
   onOpenDiceModal: () => void;
 }
 
-const EXPRESSIONS: { type: Expression; emoji: string; label: string }[] = [
-  { type: 'normal', emoji: '✨', label: 'Normal' },
-  { type: 'blush', emoji: '😳', label: 'Sonrojado' },
-  { type: 'smirk', emoji: '😏', label: 'Pícaro' },
-  { type: 'surprised', emoji: '😮', label: 'Sorprendido' },
-  { type: 'teasing', emoji: '😜', label: 'Burlón' },
-  { type: 'serious', emoji: '🧐', label: 'Solemne' },
-];
-
 export const MessageInput: React.FC<MessageInputProps> = ({
   player,
   onSendMessage,
   onOpenDiceModal,
 }) => {
   const [content, setContent] = useState('');
-  const [expression, setExpression] = useState<Expression>('normal');
-  const [showExpressions, setShowExpressions] = useState(false);
   const [isSecret, setIsSecret] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
@@ -39,18 +28,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     SoundEffects.playSend();
     onSendMessage(
       content.trim(),
-      expression,
+      'normal', // expression is always normal now (picker removed)
       selectedImages.length > 0 ? selectedImages : undefined,
       isSecret
     );
 
-    // Reset input
+    // Reset
     setContent('');
     setSelectedImages([]);
     imagePreviewUrls.forEach((url) => URL.revokeObjectURL(url));
     setImagePreviewUrls([]);
     setIsSecret(false);
-    setShowExpressions(false);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -69,52 +57,17 @@ export const MessageInput: React.FC<MessageInputProps> = ({
     if (files && files.length > 0) {
       SoundEffects.playChime();
       const newFilesArray = Array.from(files);
-      const combinedFiles = [...selectedImages, ...newFilesArray];
-      setSelectedImages(combinedFiles);
-
+      setSelectedImages((prev) => [...prev, ...newFilesArray]);
       const newUrls = newFilesArray.map((f) => URL.createObjectURL(f));
       setImagePreviewUrls((prev) => [...prev, ...newUrls]);
     }
-    // reset input so same file can be re-selected if needed
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleRemoveImage = (indexToRemove: number) => {
     URL.revokeObjectURL(imagePreviewUrls[indexToRemove]);
     setSelectedImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
     setImagePreviewUrls((prev) => prev.filter((_, idx) => idx !== indexToRemove));
-  };
-
-  const handleInsertAsterisks = () => {
-    SoundEffects.playChime();
-    setContent((prev) => {
-      const next = prev ? `${prev} **` : '**';
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          const pos = next.length - 1;
-          textareaRef.current.setSelectionRange(pos, pos);
-        }
-      }, 50);
-      return next;
-    });
-  };
-
-  const handleInsertSecretPipes = () => {
-    SoundEffects.playChime();
-    setContent((prev) => {
-      const next = prev ? `${prev} ||||` : '||||';
-      setTimeout(() => {
-        if (textareaRef.current) {
-          textareaRef.current.focus();
-          const pos = next.length - 2;
-          textareaRef.current.setSelectionRange(pos, pos);
-        }
-      }, 50);
-      return next;
-    });
   };
 
   const handleToggleSecret = () => {
@@ -124,32 +77,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   return (
     <div className="relative z-20 bg-genshin-dark/95 backdrop-blur-md border-t border-genshin-gold/30 p-2 sm:p-3 pb-[max(env(safe-area-inset-bottom,0px),10px)] shadow-2xl">
-      {/* Expression Picker Popup */}
-      {showExpressions && (
-        <div className="absolute bottom-full left-3 mb-2 p-2 rounded-2xl bg-genshin-card border border-genshin-gold/50 shadow-2xl flex gap-1.5 animate-fadeIn z-30">
-          {EXPRESSIONS.map((expr) => (
-            <button
-              key={expr.type}
-              type="button"
-              onClick={() => {
-                SoundEffects.playChime();
-                setExpression(expr.type);
-                setShowExpressions(false);
-              }}
-              className={`px-2 py-1.5 rounded-xl text-xs flex flex-col items-center gap-0.5 transition-all ${
-                expression === expr.type
-                  ? 'bg-genshin-gold/20 border border-genshin-gold text-genshin-gold'
-                  : 'hover:bg-genshin-panel text-slate-300'
-              }`}
-            >
-              <span className="text-base">{expr.emoji}</span>
-              <span className="text-[9px]">{expr.label}</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Multi-Image Preview bar (if attached) */}
+      {/* Multi-Image Preview bar */}
       {imagePreviewUrls.length > 0 && (
         <div className="mb-2 p-2 rounded-2xl bg-genshin-panel/80 border border-genshin-gold/40 flex items-center gap-2 overflow-x-auto max-w-3xl mx-auto shadow-md">
           <span className="text-[10px] font-serif font-bold text-genshin-gold whitespace-nowrap pl-1">
@@ -177,7 +105,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               type="button"
               onClick={() => fileInputRef.current?.click()}
               className="w-12 h-12 rounded-xl border border-dashed border-genshin-gold/50 hover:border-genshin-gold bg-genshin-dark/50 flex flex-col items-center justify-center text-genshin-gold hover:scale-105 transition-all shrink-0"
-              title="Añadir más fotos a este mensaje"
+              title="Añadir más fotos"
             >
               <Plus className="w-4 h-4" />
               <span className="text-[8px] font-serif">Más</span>
@@ -188,7 +116,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
       {/* Main Input Bar */}
       <div className="max-w-3xl mx-auto flex items-end gap-2">
-        {/* Current Player Avatar */}
+        {/* Player Avatar */}
         <div
           className="shrink-0 p-0.5 rounded-2xl bg-genshin-panel border border-genshin-gold/40 shadow-sm"
           title={`Escribiendo como ${player.displayName}`}
@@ -200,7 +128,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
           />
         </div>
 
-        {/* Input box with tools */}
+        {/* Input box */}
         <div className="flex-1 bg-genshin-panel/80 rounded-2xl border border-genshin-border focus-within:border-genshin-gold/80 transition-all flex flex-col p-1.5 shadow-inner">
           <textarea
             ref={textareaRef}
@@ -214,112 +142,88 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             onKeyDown={handleKeyDown}
             placeholder={
               selectedImages.length > 0
-                ? `Escribe un pie de foto / descripción para tus ${selectedImages.length} fotos...`
-                : `Escribe como ${player.displayName}... (*acción* diálogo ||secreto||)`
+                ? `Pie de foto para ${selectedImages.length} ${selectedImages.length === 1 ? 'foto' : 'fotos'}...`
+                : `Escribe como ${player.displayName}… *acción* diálogo ||secreto|| (off-rol)`
             }
             className="w-full bg-transparent px-2.5 py-1 text-xs sm:text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none max-h-28"
           />
 
-          {/* Action Tools Inside Input */}
-          <div className="flex items-center justify-between pt-1 px-1 border-t border-slate-700/40">
-            <div className="flex items-center gap-1 flex-wrap">
-              {/* Expression selector button */}
-              <button
-                type="button"
-                onClick={() => {
-                  SoundEffects.playChime();
-                  setShowExpressions((prev) => !prev);
-                }}
-                className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-colors ${
-                  expression !== 'normal'
-                    ? 'text-genshin-gold bg-genshin-gold/20'
-                    : 'text-slate-400 hover:text-slate-200'
-                }`}
-                title="Cambiar expresión"
-              >
-                <Smile className="w-3.5 h-3.5" />
-                <span className="text-[10px] hidden xs:inline">
-                  {EXPRESSIONS.find((e) => e.type === expression)?.label}
-                </span>
-              </button>
+          {/* Tool row */}
+          <div className="flex items-center gap-1 pt-1 px-1 border-t border-slate-700/40">
+            {/* Secret Spoiler shortcut ||...|| */}
+            <button
+              type="button"
+              onClick={() => {
+                SoundEffects.playChime();
+                setContent((prev) => {
+                  const next = prev ? `${prev} ||||` : '||||';
+                  setTimeout(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.focus();
+                      textareaRef.current.setSelectionRange(next.length - 2, next.length - 2);
+                    }
+                  }, 50);
+                  return next;
+                });
+              }}
+              className="px-1.5 py-0.5 rounded text-[11px] font-mono text-purple-300/90 hover:text-purple-200 hover:bg-purple-900/30 border border-purple-500/30"
+              title="Insertar texto secreto difuminado ||...|+"
+            >
+              ||secreto||
+            </button>
 
-              {/* Asterisk narrative action shortcut */}
-              <button
-                type="button"
-                onClick={handleInsertAsterisks}
-                className="px-1.5 py-0.5 rounded text-[11px] font-serif text-genshin-gold/80 hover:text-genshin-gold hover:bg-genshin-gold/10"
-                title="Insertar acción narrativa *...*"
-              >
-                *acción*
-              </button>
+            {/* Secret whole-message toggle */}
+            <button
+              type="button"
+              onClick={handleToggleSecret}
+              className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all ${
+                isSecret
+                  ? 'bg-purple-900/60 border border-purple-500/60 text-purple-200 shadow-sm'
+                  : 'text-slate-400 hover:text-purple-300'
+              }`}
+              title={isSecret ? 'Mensaje difuminado activo' : 'Enviar mensaje/fotos difuminadas'}
+            >
+              {isSecret ? <Lock className="w-3.5 h-3.5 text-purple-300" /> : <EyeOff className="w-3.5 h-3.5" />}
+              <span className="text-[10px] hidden sm:inline">{isSecret ? 'Difuminado' : 'Ocultar'}</span>
+            </button>
 
-              {/* Secret Spoiler Pipes shortcut ||...|| */}
-              <button
-                type="button"
-                onClick={handleInsertSecretPipes}
-                className="px-1.5 py-0.5 rounded text-[11px] font-mono text-purple-300/90 hover:text-purple-200 hover:bg-purple-900/30 border border-purple-500/30"
-                title="Insertar texto secreto difuminado ||...||"
-              >
-                ||secreto||
-              </button>
+            {/* Attach images */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
+                selectedImages.length > 0
+                  ? 'text-genshin-gold bg-genshin-gold/20'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-genshin-card'
+              }`}
+              title="Adjuntar fotos"
+            >
+              <ImageIcon className="w-3.5 h-3.5" />
+              {selectedImages.length > 0 && (
+                <span className="text-[10px] font-bold font-mono">{selectedImages.length}</span>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*"
+              onChange={handleImagesChange}
+              className="hidden"
+            />
 
-              {/* Secret Message Mode Toggle (blurs whole message / photos) */}
-              <button
-                type="button"
-                onClick={handleToggleSecret}
-                className={`p-1.5 rounded-lg text-xs flex items-center gap-1 transition-all ${
-                  isSecret
-                    ? 'bg-purple-900/60 border border-purple-500/60 text-purple-200 shadow-sm'
-                    : 'text-slate-400 hover:text-purple-300'
-                }`}
-                title={isSecret ? 'Mensaje Difuminado Activo' : 'Enviar mensaje/fotos difuminadas'}
-              >
-                {isSecret ? <Lock className="w-3.5 h-3.5 text-purple-300" /> : <EyeOff className="w-3.5 h-3.5" />}
-                <span className="text-[10px] hidden sm:inline">
-                  {isSecret ? 'Difuminado' : 'Ocultar'}
-                </span>
-              </button>
-
-              {/* Attach Multiple Images button */}
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`p-1.5 rounded-lg transition-colors flex items-center gap-1 ${
-                  selectedImages.length > 0
-                    ? 'text-genshin-gold bg-genshin-gold/20'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-genshin-card'
-                }`}
-                title="Adjuntar fotos (puedes seleccionar varias a la vez)"
-              >
-                <ImageIcon className="w-3.5 h-3.5" />
-                {selectedImages.length > 0 && (
-                  <span className="text-[10px] font-bold font-mono">
-                    {selectedImages.length}
-                  </span>
-                )}
-              </button>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                accept="image/*"
-                onChange={handleImagesChange}
-                className="hidden"
-              />
-
-              {/* Dice Roller Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  SoundEffects.playChime();
-                  onOpenDiceModal();
-                }}
-                className="p-1.5 rounded-lg text-genshin-gold hover:text-amber-300 hover:bg-genshin-card transition-colors"
-                title="Lanzar Dados D&D"
-              >
-                <Dices className="w-3.5 h-3.5" />
-              </button>
-            </div>
+            {/* Dice Roller */}
+            <button
+              type="button"
+              onClick={() => {
+                SoundEffects.playChime();
+                onOpenDiceModal();
+              }}
+              className="p-1.5 rounded-lg text-genshin-gold hover:text-amber-300 hover:bg-genshin-card transition-colors"
+              title="Lanzar Dados D&D"
+            >
+              <Dices className="w-3.5 h-3.5" />
+            </button>
           </div>
         </div>
 
@@ -333,7 +237,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
               ? 'bg-gradient-to-r from-amber-600 to-yellow-600 text-amber-950 shadow-genshin-gold hover:brightness-110'
               : 'bg-genshin-panel/50 text-slate-600 cursor-not-allowed'
           }`}
-          title="Enviar mensaje y fotos"
+          title="Enviar"
         >
           <Send className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
