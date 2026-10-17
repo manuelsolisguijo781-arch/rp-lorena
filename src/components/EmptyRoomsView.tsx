@@ -33,7 +33,8 @@ export const EmptyRoomsView: React.FC<EmptyRoomsViewProps> = ({
         roomName.trim(),
         roomDesc.trim(),
         roomBg.trim(),
-        player.username
+        player.username,
+        player.id
       );
       SoundEffects.playCriticalSuccess();
       onRoomCreatedOrJoined(newRoom);
@@ -57,6 +58,7 @@ export const EmptyRoomsView: React.FC<EmptyRoomsViewProps> = ({
       if (!room) {
         throw new Error('No se encontró ninguna sala con ese código. Comprueba que esté bien escrito.');
       }
+      await dbService.joinRoom(room.id, player.id, player.username);
       SoundEffects.playCriticalSuccess();
       onRoomCreatedOrJoined(room);
     } catch (err: any) {

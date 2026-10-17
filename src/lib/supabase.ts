@@ -104,36 +104,81 @@ export const dbService = {
     }).eq('id', player.id);
   },
 
-  // --- ROOMS & INVITE CODES ---
+  // --- ROOMS & INVITE CODES (PRIVATE PER USER) ---
 
-  async fetchAllRooms(): Promise<Room[]> {
-    const { data, error } = await supabase
-      .from('rooms')
-      .select('*')
-      .order('created_at', { ascending: false });
+  async fetchAllRooms(userId: string, username: string): Promise<Room[]> {
+    try {
+      // 1. Get room IDs from local cache
+      const localKey = `rp_joined_rooms_${userId}`;
+      let localRoomIds: string[] = [];
+      try {
+        localRoomIds = JSON.parse(localStorage.getItem(localKey) || '[]');
+      } catch {
+        localRoomIds = [];
+      }
 
-    if (error || !data) return [];
+      // 2. Query memberships in characters table
+      const { data: memberRows } = await supabase
+        .from('characters')
+        .select('name')
+        .or(`title.eq.${userId},avatar_url.eq.${username}`);
 
-    return data.map((r) => ({
-      id: r.id,
-      name: r.name,
-      description: r.description || '',
-      inviteCode: r.location || r.id.substring(0, 8), // Stored in location column
-      createdBy: r.region || 'Desconocido', // Stored in region column
-      members: [],
-      backgroundUrl: r.background_url || '',
-      ambientType: (r.ambient_type || 'night') as Room['ambientType'],
-      createdAt: new Date(r.created_at).getTime(),
-    }));
+      const memberRoomIds = memberRows ? memberRows.map((r) => r.name) : [];
+
+      // 3. Query rooms created by this user
+      const { data: createdRows } = await supabase
+        .from('rooms')
+        .select('id')
+        .eq('region', username);
+
+      const createdRoomIds = createdRows ? createdRows.map((r) => r.id) : [];
+
+      // Combine all room IDs uniquely
+      const combinedIds = Array.from(new Set([...localRoomIds, ...memberRoomIds, ...createdRoomIds]));
+
+      if (combinedIds.length === 0) {
+        return [];
+      }
+
+      // Sync combined back to localStorage
+      try {
+        localStorage.setItem(localKey, JSON.stringify(combinedIds));
+      } catch {
+        // ignore storage errors
+      }
+
+      const { data, error } = await supabase
+        .from('rooms')
+        .select('*')
+        .in('id', combinedIds)
+        .order('created_at', { ascending: false });
+
+      if (error || !data) return [];
+
+      return data.map((r) => ({
+        id: r.id,
+        name: r.name,
+        description: r.description || '',
+        inviteCode: r.location || r.id.substring(0, 8),
+        createdBy: r.region || 'Desconocido',
+        members: [],
+        backgroundUrl: r.background_url || '',
+        ambientType: (r.ambient_type || 'night') as Room['ambientType'],
+        createdAt: new Date(r.created_at).getTime(),
+      }));
+    } catch (err) {
+      console.error('Error fetching private rooms:', err);
+      return [];
+    }
   },
 
   async createRoom(
     name: string,
     description: string,
     backgroundUrl: string,
-    createdByUsername: string
+    createdByUsername: string,
+    creatorUserId: string
   ): Promise<Room> {
-    // Generate clean 6-character uppercase alphanumeric code e.g. "ROL-942"
     const randomCode = `ROL-${Math.floor(100 + Math.random() * 900)}`;
     const roomId = `room-${Date.now()}`;
 
@@ -166,6 +211,9 @@ export const dbService = {
       throw new Error('Error al crear la sala: ' + error.message);
     }
 
+    // Register membership
+    await this.joinRoom(roomId, creatorUserId, createdByUsername);
+
     return newRoom;
   },
 
@@ -190,6 +238,46 @@ export const dbService = {
       ambientType: (data.ambient_type || 'night') as Room['ambientType'],
       createdAt: new Date(data.created_at).getTime(),
     };
+  },
+
+  async joinRoom(roomId: string, userId: string, username: string): Promise<void> {
+    // 1. Save in local cache
+    const localKey = `rp_joined_rooms_${userId}`;
+    try {
+      const localSaved: string[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      if (!localSaved.includes(roomId)) {
+        localSaved.push(roomId);
+        localStorage.setItem(localKey, JSON.stringify(localSaved));
+      }
+    } catch {
+      // ignore storage errors
+    }
+
+    // 2. Persist in cloud (using characters table)
+    const memberRecordId = `mem_${roomId}_${userId}`;
+    await supabase.from('characters').upsert({
+      id: memberRecordId,
+      name: roomId,
+      title: userId,
+      avatar_url: username,
+      vision: 'member',
+    });
+  },
+
+  async leaveRoom(roomId: string, userId: string): Promise<void> {
+    const localKey = `rp_joined_rooms_${userId}`;
+    try {
+      const localSaved: string[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const filtered = localSaved.filter((id) => id !== roomId);
+      localStorage.setItem(localKey, JSON.stringify(filtered));
+    } catch {
+      // ignore
+    }
+
+    await supabase
+      .from('characters')
+      .delete()
+      .eq('id', `mem_${roomId}_${userId}`);
   },
 
   // --- MESSAGES ---

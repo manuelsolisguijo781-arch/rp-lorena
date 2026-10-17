@@ -45,6 +45,10 @@ export const App: React.FC = () => {
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const roomsRef = useRef<Room[]>([]);
+  useEffect(() => {
+    roomsRef.current = rooms;
+  }, [rooms]);
 
   // Initialize Service Worker and Notifications on mount
   useEffect(() => {
@@ -63,12 +67,13 @@ export const App: React.FC = () => {
   // Check URL hash for direct invite e.g. #invite=ROL-829
   const handleCheckInviteLink = async (currentRooms: Room[]) => {
     const hash = window.location.hash;
-    if (hash.startsWith('#invite=')) {
+    if (hash.startsWith('#invite=') && player) {
       const inviteCode = hash.replace('#invite=', '').trim().toUpperCase();
       if (inviteCode) {
         try {
           const matchedRoom = await dbService.findRoomByInviteCode(inviteCode);
           if (matchedRoom) {
+            await dbService.joinRoom(matchedRoom.id, player.id, player.username);
             setRooms((prev) => {
               if (prev.some((r) => r.id === matchedRoom.id)) return prev;
               return [matchedRoom, ...prev];
@@ -96,12 +101,13 @@ export const App: React.FC = () => {
       return;
     }
 
+    const currentPlayer = player;
     let isMounted = true;
 
     async function loadCloudData() {
       try {
         setIsLoading(true);
-        const cloudRooms = await dbService.fetchAllRooms();
+        const cloudRooms = await dbService.fetchAllRooms(currentPlayer.id, currentPlayer.username);
 
         if (!isMounted) return;
 
@@ -140,13 +146,19 @@ export const App: React.FC = () => {
             timestamp: new Date(m.created_at).getTime(),
           };
 
+          // Only process message if it belongs to one of user's active rooms
+          const isMemberOfRoom = roomsRef.current.some((r) => r.id === incomingMsg.roomId);
+          if (!isMemberOfRoom && incomingMsg.roomId !== currentRoomId) {
+            return;
+          }
+
           setMessages((prev) => {
             if (prev.some((existing) => existing.id === incomingMsg.id)) return prev;
             return [...prev, incomingMsg];
           });
 
           // Trigger mobile notification & vibration if message is from the other person
-          if (m.character_id !== player.id) {
+          if (m.character_id !== currentPlayer.id) {
             notificationService.notify(
               incomingMsg.senderName,
               incomingMsg.content || (incomingMsg.imageUrl ? '📷 Te ha enviado una foto' : '🎲 Ha lanzado los dados'),
@@ -160,22 +172,25 @@ export const App: React.FC = () => {
         { event: 'INSERT', schema: 'public', table: 'rooms' },
         (payload) => {
           const r = payload.new as any;
-          const incomingRoom: Room = {
-            id: r.id,
-            name: r.name,
-            description: r.description || '',
-            inviteCode: r.location || '',
-            createdBy: r.region || '',
-            members: [],
-            backgroundUrl: r.background_url || '',
-            ambientType: (r.ambient_type || 'night') as Room['ambientType'],
-            createdAt: new Date(r.created_at).getTime(),
-          };
+          // Only automatically add room to state if this user is the creator
+          if (r.region === currentPlayer.username) {
+            const incomingRoom: Room = {
+              id: r.id,
+              name: r.name,
+              description: r.description || '',
+              inviteCode: r.location || '',
+              createdBy: r.region || '',
+              members: [],
+              backgroundUrl: r.background_url || '',
+              ambientType: (r.ambient_type || 'night') as Room['ambientType'],
+              createdAt: new Date(r.created_at).getTime(),
+            };
 
-          setRooms((prev) => {
-            if (prev.some((existing) => existing.id === incomingRoom.id)) return prev;
-            return [incomingRoom, ...prev];
-          });
+            setRooms((prev) => {
+              if (prev.some((existing) => existing.id === incomingRoom.id)) return prev;
+              return [incomingRoom, ...prev];
+            });
+          }
         }
       )
       .subscribe();
@@ -281,7 +296,7 @@ export const App: React.FC = () => {
   const handleCreateRoom = async (name: string, desc: string, bg: string) => {
     if (!player) return;
     try {
-      const newRoom = await dbService.createRoom(name, desc, bg, player.username);
+      const newRoom = await dbService.createRoom(name, desc, bg, player.username, player.id);
       setRooms((prev) => [newRoom, ...prev]);
       setCurrentRoomId(newRoom.id);
     } catch (e) {
@@ -290,9 +305,11 @@ export const App: React.FC = () => {
   };
 
   const handleJoinRoom = async (code: string) => {
+    if (!player) return;
     try {
       const matched = await dbService.findRoomByInviteCode(code);
       if (matched) {
+        await dbService.joinRoom(matched.id, player.id, player.username);
         setRooms((prev) => {
           if (prev.some((r) => r.id === matched.id)) return prev;
           return [matched, ...prev];
@@ -321,6 +338,16 @@ export const App: React.FC = () => {
   const handleClearRoomHistory = async (roomId: string) => {
     setMessages([]);
     await dbService.clearRoomMessages(roomId);
+  };
+
+  const handleLeaveRoom = async (roomId: string) => {
+    if (!player) return;
+    await dbService.leaveRoom(roomId, player.id);
+    const updated = rooms.filter((r) => r.id !== roomId);
+    setRooms(updated);
+    if (currentRoomId === roomId) {
+      setCurrentRoomId(updated.length > 0 ? updated[0].id : null);
+    }
   };
 
   // Message counts
@@ -487,6 +514,7 @@ export const App: React.FC = () => {
         messages={messages}
         player={player}
         onClearRoomHistory={handleClearRoomHistory}
+        onLeaveRoom={handleLeaveRoom}
         onLogout={handleLogout}
       />
     </div>

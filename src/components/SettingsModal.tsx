@@ -10,6 +10,7 @@ interface SettingsModalProps {
   messages: Message[];
   player: Player;
   onClearRoomHistory: (roomId: string) => void;
+  onLeaveRoom?: (roomId: string) => void;
   onLogout: () => void;
 }
 
@@ -20,9 +21,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   messages,
   player,
   onClearRoomHistory,
+  onLeaveRoom,
   onLogout,
 }) => {
   const [confirmClear, setConfirmClear] = useState(false);
+  const [confirmLeave, setConfirmLeave] = useState(false);
 
   if (!isOpen) return null;
 
@@ -121,41 +124,80 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="p-3 rounded-2xl bg-red-950/20 border border-red-900/40 space-y-2">
               <div className="flex items-center gap-2 text-xs font-serif font-bold text-red-400">
                 <Trash2 className="w-4 h-4" />
-                <span>Reiniciar Mensajes de {currentRoom.name}</span>
+                <span>Gestión de {currentRoom.name}</span>
               </div>
-              {confirmClear ? (
-                <div className="space-y-2">
-                  <p className="text-[11px] text-red-300">
-                    ¿Seguro? Esta acción vaciará el historial de esta sala.
-                  </p>
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => {
-                        SoundEffects.playCriticalFail();
-                        onClearRoomHistory(currentRoom.id);
-                        setConfirmClear(false);
-                        onClose();
-                      }}
-                      className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
-                    >
-                      Sí, Borrar
-                    </button>
-                    <button
-                      onClick={() => setConfirmClear(false)}
-                      className="flex-1 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-xs"
-                    >
-                      Cancelar
-                    </button>
+              
+              <div className="flex flex-col gap-2 pt-1">
+                {confirmClear ? (
+                  <div className="space-y-2 p-2 bg-red-950/40 rounded-xl border border-red-800/40">
+                    <p className="text-[11px] text-red-300">
+                      ¿Seguro? Esta acción vaciará el historial de esta sala.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          SoundEffects.playCriticalFail();
+                          onClearRoomHistory(currentRoom.id);
+                          setConfirmClear(false);
+                          onClose();
+                        }}
+                        className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs"
+                      >
+                        Sí, Borrar
+                      </button>
+                      <button
+                        onClick={() => setConfirmClear(false)}
+                        className="flex-1 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-xs"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setConfirmClear(true)}
-                  className="text-xs text-red-400/80 hover:text-red-300 underline"
-                >
-                  Limpiar historial de la sala
-                </button>
-              )}
+                ) : (
+                  <button
+                    onClick={() => setConfirmClear(true)}
+                    className="text-xs text-left text-red-400/80 hover:text-red-300 underline"
+                  >
+                    Limpiar historial de la sala
+                  </button>
+                )}
+
+                {onLeaveRoom && (
+                  confirmLeave ? (
+                    <div className="space-y-2 p-2 bg-amber-950/40 rounded-xl border border-amber-800/40">
+                      <p className="text-[11px] text-amber-300">
+                        ¿Abandonar esta sala? Necesitarás el código para volver a entrar.
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            SoundEffects.playChime();
+                            onLeaveRoom(currentRoom.id);
+                            setConfirmLeave(false);
+                            onClose();
+                          }}
+                          className="flex-1 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs"
+                        >
+                          Sí, Salir de la Sala
+                        </button>
+                        <button
+                          onClick={() => setConfirmLeave(false)}
+                          className="flex-1 py-1.5 rounded-lg bg-slate-700 text-slate-200 text-xs"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmLeave(true)}
+                      className="text-xs text-left text-amber-400/80 hover:text-amber-300 underline"
+                    >
+                      Abandonar esta sala
+                    </button>
+                  )
+                )}
+              </div>
             </div>
           )}
 
