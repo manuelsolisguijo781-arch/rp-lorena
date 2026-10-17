@@ -43,7 +43,7 @@ export interface DiceRoll {
 }
 
 export interface MessageBlock {
-  type: 'action' | 'dialogue' | 'secret';
+  type: 'action' | 'dialogue' | 'secret' | 'offtopic';
   text: string;
 }
 

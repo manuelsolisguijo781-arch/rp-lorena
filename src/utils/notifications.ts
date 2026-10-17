@@ -135,12 +135,12 @@ class NotificationService {
       ? '💬 Tienes un nuevo mensaje secreto en la historia.'
       : body;
 
-    // 4. Display System Notification
+    // 4. Display System Notification — unique tag so every message stacks (not replaced)
     const options: NotificationOptions = {
       body: finalBody,
       icon: iconUrl || '/rp-lorena/genshin-icon.svg',
       badge: '/rp-lorena/genshin-icon.svg',
-      tag: 'rp-chat-msg',
+      tag: `rp-msg-${Date.now()}`,  // unique per message → never collapses previous ones
       silent: !this.preferences.sound,
     };
 

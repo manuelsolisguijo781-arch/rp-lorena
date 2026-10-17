@@ -383,6 +383,18 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                         {block.text}
                       </span>
                     );
+                  } else if (block.type === 'offtopic') {
+                    /* Off-rol / out-of-character: (texto) */
+                    return (
+                      <div
+                        key={idx}
+                        className="text-[11px] sm:text-xs text-slate-400 italic font-mono px-2.5 py-1 rounded-lg bg-slate-800/60 border border-slate-700/60 leading-relaxed flex items-start gap-1.5"
+                        title="Off-rol / Fuera de personaje"
+                      >
+                        <span className="text-slate-500 shrink-0 mt-0.5 text-[10px] font-bold tracking-widest">OOC</span>
+                        <span>({block.text})</span>
+                      </div>
+                    );
                   } else {
                     return (
                       <div
