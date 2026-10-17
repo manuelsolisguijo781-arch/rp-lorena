@@ -6,89 +6,183 @@ import { MessageInput } from './components/MessageInput';
 import { DiceModal } from './components/DiceModal';
 import { PhotoModal } from './components/PhotoModal';
 import { SettingsModal } from './components/SettingsModal';
-import { DEFAULT_ROOMS, DEFAULT_CHARACTERS, INITIAL_MESSAGES } from './data/initialData';
+import { ProfileModal } from './components/ProfileModal';
+import { DEFAULT_ROOMS, DEFAULT_CHARACTERS } from './data/initialData';
 import { Room, Character, Message, Expression, DiceRoll } from './types';
 import { parseMessageContent } from './utils/parser';
-import { Sparkles, MessageSquare } from 'lucide-react';
+import { supabase, dbService, PlayerProfile } from './lib/supabase';
+import { Sparkles, MessageSquare, Wifi, Loader2 } from 'lucide-react';
 
-const STORAGE_KEY_ROOMS = 'rp_lorena_rooms_v1';
-const STORAGE_KEY_CHARS = 'rp_lorena_chars_v1';
-const STORAGE_KEY_MSGS = 'rp_lorena_msgs_v1';
+const DEFAULT_PROFILES: PlayerProfile[] = [
+  {
+    id: 'profile-lorena',
+    username: 'lorena',
+    display_name: 'Lorena',
+    avatar_url: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150&auto=format&fit=crop&q=80',
+    bio: 'Dama de las Estrellas • Hechicera Cryo',
+    active_character_id: 'char-lorena',
+  },
+  {
+    id: 'profile-bruno',
+    username: 'bruno',
+    display_name: 'Bruno',
+    avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+    bio: 'Caballero Errante • Portador Pyro',
+    active_character_id: 'char-bruno',
+  },
+];
 
 export const App: React.FC = () => {
-  // Load initial states from localStorage with fallbacks
-  const [rooms, setRooms] = useState<Room[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_ROOMS);
-      return saved ? JSON.parse(saved) : DEFAULT_ROOMS;
-    } catch {
-      return DEFAULT_ROOMS;
-    }
-  });
+  // Core Data States
+  const [rooms, setRooms] = useState<Room[]>(DEFAULT_ROOMS);
+  const [currentRoomId, setCurrentRoomId] = useState<string>(DEFAULT_ROOMS[0].id);
+  const [characters, setCharacters] = useState<Character[]>(DEFAULT_CHARACTERS);
+  const [activeCharacterId, setActiveCharacterId] = useState<string>(DEFAULT_CHARACTERS[0].id);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [profiles, setProfiles] = useState<PlayerProfile[]>(DEFAULT_PROFILES);
+  const [activeProfileId, setActiveProfileId] = useState<string>(DEFAULT_PROFILES[0].id);
 
-  const [currentRoomId, setCurrentRoomId] = useState<string>(() => rooms[0]?.id || DEFAULT_ROOMS[0].id);
-
-  const [characters, setCharacters] = useState<Character[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_CHARS);
-      return saved ? JSON.parse(saved) : DEFAULT_CHARACTERS;
-    } catch {
-      return DEFAULT_CHARACTERS;
-    }
-  });
-
-  const [activeCharacterId, setActiveCharacterId] = useState<string>(() => characters[0]?.id || DEFAULT_CHARACTERS[0].id);
-
-  const [messages, setMessages] = useState<Message[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY_MSGS);
-      return saved ? JSON.parse(saved) : INITIAL_MESSAGES;
-    } catch {
-      return INITIAL_MESSAGES;
-    }
-  });
-
-  // Modal states
+  // Status & Modals
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isRoomDrawerOpen, setIsRoomDrawerOpen] = useState(false);
   const [isDiceModalOpen, setIsDiceModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Sync to localStorage
+  // 1. Initial Load from Supabase
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_ROOMS, JSON.stringify(rooms));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [rooms]);
+    let isMounted = true;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_CHARS, JSON.stringify(characters));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [characters]);
+    async function loadCloudData() {
+      try {
+        setIsLoading(true);
+        const [cloudRooms, cloudChars, cloudMsgs, cloudProfiles] = await Promise.all([
+          dbService.fetchRooms(),
+          dbService.fetchCharacters(),
+          dbService.fetchMessages(),
+          dbService.fetchProfiles(),
+        ]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY_MSGS, JSON.stringify(messages));
-    } catch (e) {
-      console.error(e);
-    }
-  }, [messages]);
+        if (!isMounted) return;
 
-  // Current room object
+        if (cloudRooms.length > 0) {
+          setRooms(cloudRooms);
+          setCurrentRoomId(cloudRooms[0].id);
+        }
+        if (cloudChars.length > 0) {
+          setCharacters(cloudChars);
+          setActiveCharacterId(cloudChars[0].id);
+        }
+        if (cloudMsgs.length > 0) {
+          setMessages(cloudMsgs);
+        }
+        if (cloudProfiles.length > 0) {
+          setProfiles(cloudProfiles);
+          setActiveProfileId(cloudProfiles[0].id);
+        }
+
+        setIsCloudConnected(true);
+      } catch (err) {
+        console.error('Error loading Supabase data:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    }
+
+    loadCloudData();
+
+    // 2. Realtime Subscription on Messages, Rooms, and Characters
+    const channel = supabase
+      .channel('realtime:roleplay')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'messages' },
+        (payload) => {
+          const m = payload.new as any;
+          const incomingMsg: Message = {
+            id: m.id,
+            roomId: m.room_id,
+            characterId: m.character_id,
+            characterName: m.character_name,
+            characterAvatar: m.character_avatar || '',
+            characterVision: m.character_vision || 'Pyro',
+            expression: m.expression || 'normal',
+            content: m.content || '',
+            parsedBlocks: m.parsed_blocks || [],
+            diceRoll: m.dice_roll || undefined,
+            imageUrl: m.image_url || undefined,
+            timestamp: new Date(m.created_at).getTime(),
+          };
+
+          setMessages((prev) => {
+            if (prev.some((existing) => existing.id === incomingMsg.id)) return prev;
+            return [...prev, incomingMsg];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'rooms' },
+        (payload) => {
+          const r = payload.new as any;
+          const incomingRoom: Room = {
+            id: r.id,
+            name: r.name,
+            location: r.location || '',
+            region: r.region || 'Mondstadt',
+            description: r.description || '',
+            backgroundUrl: r.background_url || '',
+            ambientType: r.ambient_type || 'night',
+            createdAt: new Date(r.created_at).getTime(),
+          };
+          setRooms((prev) => {
+            if (prev.some((existing) => existing.id === incomingRoom.id)) return prev;
+            return [incomingRoom, ...prev];
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'characters' },
+        (payload) => {
+          const c = payload.new as any;
+          setCharacters((prev) =>
+            prev.map((char) =>
+              char.id === c.id
+                ? {
+                    id: c.id,
+                    name: c.name,
+                    title: c.title || '',
+                    avatarUrl: c.avatar_url || '',
+                    vision: c.vision || 'Pyro',
+                    color: c.color || '#e05353',
+                  }
+                : char
+            )
+          );
+        }
+      )
+      .subscribe();
+
+    return () => {
+      isMounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  // Current room, character, and profile
   const currentRoom = rooms.find((r) => r.id === currentRoomId) || rooms[0] || DEFAULT_ROOMS[0];
   const activeCharacter = characters.find((c) => c.id === activeCharacterId) || characters[0] || DEFAULT_CHARACTERS[0];
+  const activeProfile = profiles.find((p) => p.id === activeProfileId) || profiles[0] || DEFAULT_PROFILES[0];
 
   // Room messages
   const currentRoomMessages = messages.filter((m) => m.roomId === currentRoom.id);
 
-  // Auto scroll to bottom
+  // Auto scroll
   const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
   };
@@ -101,41 +195,48 @@ export const App: React.FC = () => {
     scrollToBottom('smooth');
   }, [messages.length]);
 
-  // Handler: send text/image message
-  const handleSendMessage = (content: string, expression: Expression, imageFile?: File) => {
-    const processSend = (imageUrl?: string) => {
-      const newMessage: Message = {
-        id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-        roomId: currentRoom.id,
-        characterId: activeCharacter.id,
-        characterName: activeCharacter.name,
-        characterAvatar: activeCharacter.avatarUrl,
-        characterVision: activeCharacter.vision,
-        expression: expression,
-        content: content,
-        parsedBlocks: parseMessageContent(content),
-        imageUrl: imageUrl,
-        timestamp: Date.now(),
-      };
-
-      setMessages((prev) => [...prev, newMessage]);
-    };
+  // Handler: send text or image message
+  const handleSendMessage = async (content: string, expression: Expression, imageFile?: File) => {
+    let uploadedImageUrl: string | undefined = undefined;
 
     if (imageFile) {
-      // Read image as Data URL (can also be compressed)
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        const resultUrl = e.target?.result as string;
-        processSend(resultUrl);
-      };
-      reader.readAsDataURL(imageFile);
-    } else {
-      processSend();
+      // Upload to Supabase Storage bucket
+      const cloudUrl = await dbService.uploadImage(imageFile);
+      if (cloudUrl) {
+        uploadedImageUrl = cloudUrl;
+      } else {
+        // Fallback to local DataURL if offline
+        uploadedImageUrl = await new Promise((res) => {
+          const reader = new FileReader();
+          reader.onload = (e) => res(e.target?.result as string);
+          reader.readAsDataURL(imageFile);
+        });
+      }
     }
+
+    const newMessage: Message = {
+      id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      roomId: currentRoom.id,
+      characterId: activeCharacter.id,
+      characterName: activeCharacter.name,
+      characterAvatar: activeCharacter.avatarUrl,
+      characterVision: activeCharacter.vision,
+      expression: expression,
+      content: content,
+      parsedBlocks: parseMessageContent(content),
+      imageUrl: uploadedImageUrl,
+      timestamp: Date.now(),
+    };
+
+    // Optimistic UI update
+    setMessages((prev) => [...prev, newMessage]);
+
+    // Push to Supabase Cloud
+    await dbService.insertMessage(newMessage);
   };
 
-  // Handler: publish dice roll
-  const handleSendDiceRoll = (roll: DiceRoll, optionalMessage?: string) => {
+  // Handler: publish D&D dice roll
+  const handleSendDiceRoll = async (roll: DiceRoll, optionalMessage?: string) => {
     const rawContent = optionalMessage || `*${activeCharacter.name} lanza los dados con determinación.*`;
     const newMessage: Message = {
       id: `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
@@ -151,31 +252,46 @@ export const App: React.FC = () => {
       timestamp: Date.now(),
     };
 
+    // Optimistic UI update
     setMessages((prev) => [...prev, newMessage]);
+
+    // Push to Supabase Cloud
+    await dbService.insertMessage(newMessage);
   };
 
   // Handler: create room
-  const handleCreateRoom = (newRoomData: Omit<Room, 'id' | 'createdAt'>) => {
+  const handleCreateRoom = async (newRoomData: Omit<Room, 'id' | 'createdAt'>) => {
     const newRoom: Room = {
       ...newRoomData,
       id: `room-${Date.now()}`,
       createdAt: Date.now(),
     };
+
     setRooms((prev) => [newRoom, ...prev]);
     setCurrentRoomId(newRoom.id);
+
+    await dbService.insertRoom(newRoom);
   };
 
   // Handler: update character
-  const handleUpdateCharacter = (updated: Character) => {
+  const handleUpdateCharacter = async (updated: Character) => {
     setCharacters((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    await dbService.updateCharacter(updated);
   };
 
-  // Handler: clear history for room
-  const handleClearRoomHistory = (roomId: string) => {
+  // Handler: update profile
+  const handleSaveProfile = async (updated: PlayerProfile) => {
+    setProfiles((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+    await dbService.upsertProfile(updated);
+  };
+
+  // Handler: clear history
+  const handleClearRoomHistory = async (roomId: string) => {
     setMessages((prev) => prev.filter((m) => m.roomId !== roomId));
+    await dbService.clearRoomMessages(roomId);
   };
 
-  // Message count per room
+  // Message counts
   const messageCounts = rooms.reduce((acc, r) => {
     acc[r.id] = messages.filter((m) => m.roomId === r.id).length;
     return acc;
@@ -183,7 +299,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="relative w-full h-[100dvh] flex flex-col overflow-hidden bg-genshin-dark select-none">
-      {/* Background Wallpaper with Ambient Blur and Dark Vignette */}
+      {/* Background Wallpaper */}
       <div
         className="absolute inset-0 bg-cover bg-center transition-all duration-700 ease-in-out opacity-25 scale-105"
         style={{ backgroundImage: `url(${currentRoom.backgroundUrl})` }}
@@ -196,19 +312,32 @@ export const App: React.FC = () => {
       {/* Header */}
       <Header
         currentRoom={currentRoom}
+        activeProfile={activeProfile}
         onOpenRoomDrawer={() => setIsRoomDrawerOpen(true)}
         onOpenDiceModal={() => setIsDiceModalOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenProfile={() => setIsProfileOpen(true)}
       />
+
+      {/* Cloud Status Indicator Bar */}
+      <div className="relative z-10 px-3 py-1 bg-black/40 border-b border-slate-800/80 flex items-center justify-between text-[10px] text-slate-400 font-mono">
+        <div className="flex items-center gap-1.5">
+          <Wifi className={`w-3 h-3 ${isCloudConnected ? 'text-emerald-400' : 'text-amber-400 animate-pulse'}`} />
+          <span>{isCloudConnected ? 'En directo con Supabase (Tiempo Real)' : 'Conectando con la nube...'}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span>Jugando como: <strong className="text-genshin-gold font-serif">{activeProfile.display_name}</strong></span>
+        </div>
+      </div>
 
       {/* Main Messages Feed */}
       <main className="relative z-10 flex-1 overflow-y-auto overflow-x-hidden p-2 sm:p-4 space-y-3">
         {/* Room Intro Banner */}
-        <div className="max-w-xl mx-auto my-4 p-4 rounded-3xl bg-genshin-card/60 backdrop-blur-md border border-genshin-gold/30 text-center shadow-lg">
-          <div className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-genshin-gold/20 border border-genshin-gold/40 text-genshin-gold mb-2">
-            <Sparkles className="w-4 h-4" />
+        <div className="max-w-xl mx-auto my-3 p-3.5 rounded-3xl bg-genshin-card/60 backdrop-blur-md border border-genshin-gold/30 text-center shadow-lg">
+          <div className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-genshin-gold/20 border border-genshin-gold/40 text-genshin-gold mb-1.5">
+            <Sparkles className="w-3.5 h-3.5" />
           </div>
-          <h2 className="text-sm sm:text-base font-serif font-bold text-amber-100 tracking-wide">
+          <h2 className="text-sm font-serif font-bold text-amber-100 tracking-wide">
             {currentRoom.name}
           </h2>
           <p className="text-[11px] text-slate-300 mt-1 leading-relaxed max-w-md mx-auto">
@@ -216,8 +345,13 @@ export const App: React.FC = () => {
           </p>
         </div>
 
-        {/* Message Items */}
-        {currentRoomMessages.length > 0 ? (
+        {/* Loading Spinner */}
+        {isLoading ? (
+          <div className="py-12 flex flex-col items-center justify-center text-slate-400 gap-2">
+            <Loader2 className="w-6 h-6 animate-spin text-genshin-gold" />
+            <span className="text-xs font-serif">Sincronizando crónicas de Teyvat...</span>
+          </div>
+        ) : currentRoomMessages.length > 0 ? (
           currentRoomMessages.map((msg) => (
             <MessageItem
               key={msg.id}
@@ -271,6 +405,17 @@ export const App: React.FC = () => {
       <PhotoModal
         imageUrl={selectedPhotoUrl}
         onClose={() => setSelectedPhotoUrl(null)}
+      />
+
+      {/* Player Profile & Customization Modal */}
+      <ProfileModal
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        activeProfile={activeProfile}
+        allProfiles={profiles}
+        onSelectProfile={(p) => setActiveProfileId(p.id)}
+        onSaveProfile={handleSaveProfile}
+        messageCount={messages.length}
       />
 
       {/* Settings & Export Modal */}
