@@ -1,28 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { X, Bell, BellOff, Volume2, VolumeX, Smartphone, EyeOff, ShieldCheck, Sparkles, Send } from 'lucide-react';
+import { X, Bell, BellOff, Volume2, VolumeX, Smartphone, EyeOff, ShieldCheck, Sparkles, Send, Clock, CloudCheck } from 'lucide-react';
 import { notificationService, NotificationPreferences } from '../utils/notifications';
 import { SoundEffects } from '../utils/sound';
+import { dbService } from '../lib/supabase';
 
 interface NotificationModalProps {
   isOpen: boolean;
   onClose: () => void;
   playerAvatar?: string;
+  userId?: string;
+  roomId?: string;
 }
 
 export const NotificationModal: React.FC<NotificationModalProps> = ({
   isOpen,
   onClose,
   playerAvatar,
+  userId,
+  roomId,
 }) => {
   const [permission, setPermission] = useState<NotificationPermission>('default');
   const [prefs, setPrefs] = useState<NotificationPreferences>(notificationService.getPreferences());
   const [testSent, setTestSent] = useState(false);
+  const [countdown, setCountdown] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setPermission(notificationService.getPermission());
       setPrefs(notificationService.getPreferences());
       setTestSent(false);
+      setCountdown(null);
     }
   }, [isOpen]);
 
@@ -30,7 +37,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   const handleRequestPermission = async () => {
     SoundEffects.playChime();
-    const granted = await notificationService.requestPermission();
+    const granted = await notificationService.requestPermission(userId);
     setPermission(notificationService.getPermission());
     if (granted) {
       setPrefs(notificationService.getPreferences());
@@ -55,6 +62,43 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
       playerAvatar
     );
     setTimeout(() => setTestSent(false), 2500);
+  };
+
+  const handleDelayedLockTest = () => {
+    if (countdown !== null) return;
+    SoundEffects.playChime();
+    let timeLeft = 5;
+    setCountdown(timeLeft);
+
+    const timer = setInterval(() => {
+      timeLeft -= 1;
+      if (timeLeft > 0) {
+        setCountdown(timeLeft);
+      } else {
+        clearInterval(timer);
+        setCountdown(null);
+        setTestSent(true);
+
+        notificationService.notify(
+          'Aviso en Pantalla Bloqueada 🔒✨',
+          prefs.discreteMode
+            ? '💬 Tienes un nuevo mensaje secreto en la historia.'
+            : '¡Tu iPhone ha recibido la alerta con la pantalla apagada correctamente!',
+          playerAvatar
+        );
+
+        if (roomId && userId) {
+          dbService.sendPushToRoom(
+            roomId,
+            userId,
+            'Prueba de Servidor Webhook',
+            'Alerta en reposo recibida con éxito ✨'
+          ).catch(() => {});
+        }
+
+        setTimeout(() => setTestSent(false), 3000);
+      }
+    }, 1000);
   };
 
   return (
@@ -243,14 +287,14 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
           </div>
         </div>
 
-        {/* Test Notification Button */}
-        <div className="pt-2">
+        {/* Test Notification Buttons */}
+        <div className="pt-2 space-y-2">
           <button
             onClick={handleSendTestNotification}
             disabled={!prefs.enabled || permission !== 'granted'}
             className="w-full py-2.5 rounded-2xl bg-genshin-panel/80 hover:bg-genshin-panel border border-genshin-gold/40 text-genshin-gold font-serif text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-sm"
           >
-            {testSent ? (
+            {testSent && countdown === null ? (
               <>
                 <Sparkles className="w-4 h-4 animate-spin text-amber-300" />
                 <span>¡Aviso de prueba enviado! Revisa tu móvil</span>
@@ -258,13 +302,43 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
             ) : (
               <>
                 <Send className="w-3.5 h-3.5" />
-                <span>Enviar Notificación de Prueba</span>
+                <span>Enviar Notificación Directa</span>
               </>
             )}
           </button>
-          <p className="text-[10px] text-center text-slate-500 mt-2">
-            💡 En iOS (iPhone), la app debe estar agregada a la pantalla de inicio para avisar en reposo.
-          </p>
+
+          {/* Test for Lock Screen / Sleep Mode */}
+          <button
+            onClick={handleDelayedLockTest}
+            disabled={!prefs.enabled || permission !== 'granted' || countdown !== null}
+            className="w-full py-2.5 rounded-2xl bg-gradient-to-r from-amber-950/80 to-slate-900 border border-amber-500/50 text-amber-200 font-serif text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.98] disabled:opacity-40 disabled:pointer-events-none shadow-sm hover:border-amber-400"
+          >
+            {countdown !== null ? (
+              <>
+                <Clock className="w-4 h-4 animate-spin text-amber-400" />
+                <span className="text-amber-300 font-bold">
+                  ¡Bloquea tu iPhone YA! ({countdown}s...)
+                </span>
+              </>
+            ) : (
+              <>
+                <Smartphone className="w-3.5 h-3.5 text-genshin-gold" />
+                <span>Probar con Pantalla Apagada (en 5 seg)</span>
+              </>
+            )}
+          </button>
+
+          <div className="p-2.5 rounded-xl bg-slate-900/60 border border-slate-800 text-[10px] text-slate-400 leading-relaxed space-y-1">
+            <p className="flex items-center gap-1.5 text-slate-300 font-bold">
+              <span>🍎</span>
+              <span>Requisitos en iPhone (iOS):</span>
+            </p>
+            <ul className="list-disc list-inside space-y-0.5 text-slate-400 pl-1">
+              <li>Usa la app añadida a la <strong>Pantalla de inicio</strong>.</li>
+              <li>Asegúrate de no tener Safari abierto compitiendo en segundo plano.</li>
+              <li>Revisa en Ajustes de iOS que los avisos y sonido estén activos.</li>
+            </ul>
+          </div>
         </div>
       </div>
     </div>

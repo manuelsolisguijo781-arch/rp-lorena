@@ -3,6 +3,22 @@
  * Integrates Service Worker, Web Notification API, Sound and Mobile Haptic Vibration
  */
 import { SoundEffects } from './sound';
+import { dbService } from '../lib/supabase';
+
+export const VAPID_PUBLIC_KEY =
+  import.meta.env.VITE_VAPID_PUBLIC_KEY ||
+  'BBFHk0URTmA6TXo_ZQX6XgzTEbdRIvfpIlFaVfaWnYMHI3WpZMos4l--Dk5OmJePidfwQ6rEiP3k0gO1B6kjIzo';
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
 
 export interface NotificationPreferences {
   enabled: boolean;
@@ -23,6 +39,7 @@ const DEFAULT_PREFERENCES: NotificationPreferences = {
 class NotificationService {
   private swRegistration: ServiceWorkerRegistration | null = null;
   private preferences: NotificationPreferences = DEFAULT_PREFERENCES;
+  private currentUserId: string | null = null;
 
   constructor() {
     this.loadPreferences();
@@ -54,12 +71,18 @@ class NotificationService {
     return { ...this.preferences };
   }
 
-  async init(): Promise<void> {
+  async init(userId?: string): Promise<void> {
     this.loadPreferences();
+    if (userId) {
+      this.currentUserId = userId;
+    }
     if ('serviceWorker' in navigator) {
       try {
         const reg = await navigator.serviceWorker.register('/rp-lorena/sw.js');
         this.swRegistration = reg;
+        if (this.currentUserId && Notification.permission === 'granted') {
+          await this.subscribeToPush(this.currentUserId);
+        }
       } catch (err) {
         console.warn('Service worker registration failed:', err);
       }
@@ -75,9 +98,40 @@ class NotificationService {
     return Notification.permission;
   }
 
-  async requestPermission(): Promise<boolean> {
+  async subscribeToPush(userId: string): Promise<boolean> {
+    this.currentUserId = userId;
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      console.warn('PushManager not available on this browser/platform');
+      return false;
+    }
+
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      this.swRegistration = reg;
+
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+        });
+      }
+
+      if (sub) {
+        const subJson = sub.toJSON();
+        await dbService.savePushSubscription(userId, subJson);
+        console.log('Web Push subscription successfully registered & stored in cloud for user:', userId);
+        return true;
+      }
+    } catch (err) {
+      console.error('Failed to subscribe to Web Push:', err);
+    }
+    return false;
+  }
+
+  async requestPermission(userId?: string): Promise<boolean> {
     if (!this.isSupported()) {
-      alert('Tu navegador no soporta notificaciones web directas. En iPhone, añade la app a la Pantalla de Inicio.');
+      alert('Tu navegador no soporta notificaciones directas. En iPhone, añade la app a la Pantalla de Inicio (Compartir > Añadir a pantalla de inicio).');
       return false;
     }
 
@@ -86,7 +140,12 @@ class NotificationService {
       if (result === 'granted') {
         SoundEffects.playCriticalSuccess();
         this.savePreferences({ enabled: true });
-        // Trigger test notification
+
+        if (userId || this.currentUserId) {
+          await this.subscribeToPush(userId || this.currentUserId!);
+        }
+
+        // Trigger welcome confirmation
         this.notify(
           '¡Avisos Activados! 🔔',
           'Tu móvil te avisará cada vez que tu pareja continúe la historia.',

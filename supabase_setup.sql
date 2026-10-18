@@ -87,3 +87,22 @@ insert into storage.buckets (id, name, public) values ('roleplay-media', 'rolepl
 on conflict (id) do nothing;
 
 create policy "Fotos públicas" on storage.objects for all using (bucket_id = 'roleplay-media') with check (bucket_id = 'roleplay-media');
+
+-- 9. TABLA DE SUSCRIPCIONES PUSH WEB (iOS & Android en segundo plano)
+create table if not exists public.push_subscriptions (
+  id text primary key,
+  user_id text not null,
+  endpoint text not null,
+  subscription jsonb not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null
+);
+
+alter table public.push_subscriptions enable row level security;
+create policy "Permitir todo en push_subscriptions" on public.push_subscriptions for all using (true) with check (true);
+
+-- 10. WEBHOOK DE BASE DE DATOS (OPCIONAL):
+-- En el panel de Supabase: Database -> Webhooks -> "Create a webhook":
+--  - Name: send_push_notification
+--  - Table: messages
+--  - Events: INSERT
+--  - Type: Supabase Edge Functions (selecciona 'send-push') o Webhook URL

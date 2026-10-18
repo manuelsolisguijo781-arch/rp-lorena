@@ -59,10 +59,10 @@ export const App: React.FC = () => {
     roomsRef.current = rooms;
   }, [rooms]);
 
-  // Initialize Service Worker and Notifications on mount
+  // Initialize Service Worker and Notifications on mount or when player changes
   useEffect(() => {
-    notificationService.init();
-  }, []);
+    notificationService.init(player?.id);
+  }, [player?.id]);
 
   // Sync auth player to localStorage
   useEffect(() => {
@@ -685,6 +685,8 @@ export const App: React.FC = () => {
         isOpen={isNotificationModalOpen}
         onClose={() => setIsNotificationModalOpen(false)}
         playerAvatar={player.avatarUrl}
+        userId={player.id}
+        roomId={currentRoomId || undefined}
       />
 
       {/* Settings & Export Modal */}

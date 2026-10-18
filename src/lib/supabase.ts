@@ -434,6 +434,14 @@ export const dbService = {
       image_url: storedImageUrl,
       created_at: new Date(message.timestamp).toISOString(),
     });
+
+    // Asynchronously trigger server-side Web Push for background mobile devices
+    this.sendPushToRoom(
+      message.roomId,
+      message.senderId,
+      message.senderName,
+      message.content || (storedImageUrl ? '📷 Te ha enviado una foto' : '🎲 Ha lanzado los dados')
+    ).catch(() => {});
   },
 
   async respondToChallenge(
@@ -537,6 +545,62 @@ export const dbService = {
     } catch (e) {
       console.error('Upload exception:', e);
       return null;
+    }
+  },
+
+  // --- WEB PUSH NOTIFICATIONS (iOS & Android Background Delivery) ---
+
+  async savePushSubscription(userId: string, subscription: any): Promise<void> {
+    try {
+      const p256dh = subscription.keys?.p256dh || '';
+      const auth = subscription.keys?.auth || '';
+      const endpoint = subscription.endpoint || '';
+
+      if (!endpoint) return;
+
+      // 1. Save in characters table (always exists and accessible)
+      await supabase.from('characters').upsert({
+        id: `push_${userId}`,
+        name: userId,
+        title: endpoint,
+        avatar_url: JSON.stringify({ p256dh, auth, endpoint }),
+        vision: 'push_sub',
+      });
+
+      // 2. Also try push_subscriptions table if present
+      try {
+        await supabase.from('push_subscriptions').upsert({
+          id: `push_${userId}`,
+          user_id: userId,
+          endpoint: endpoint,
+          subscription: subscription,
+        });
+      } catch {
+        // ignore if table does not exist
+      }
+    } catch (err) {
+      console.error('Failed to save push subscription in database:', err);
+    }
+  },
+
+  async sendPushToRoom(
+    roomId: string,
+    senderId: string,
+    senderName: string,
+    content: string
+  ): Promise<void> {
+    try {
+      await supabase.functions.invoke('send-push', {
+        body: {
+          roomId,
+          senderId,
+          senderName,
+          content,
+        },
+      });
+    } catch (err) {
+      // Edge function will log if called; ignore client network errors
+      console.debug('Push invoke result:', err);
     }
   },
 };
