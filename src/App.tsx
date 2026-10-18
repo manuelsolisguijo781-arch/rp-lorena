@@ -403,6 +403,21 @@ export const App: React.FC = () => {
     }
   };
 
+  const handleDeleteRoom = async (roomId: string) => {
+    if (!player) return;
+    try {
+      await dbService.deleteRoom(roomId, player.id);
+      const updated = rooms.filter((r) => r.id !== roomId);
+      setRooms(updated);
+      if (currentRoomId === roomId) {
+        setCurrentRoomId(updated.length > 0 ? updated[0].id : null);
+        setMessages([]);
+      }
+    } catch (err) {
+      console.error('Error deleting room:', err);
+    }
+  };
+
   const handleUpdateRoomContext = async (newContext: string) => {
     if (!currentRoom) return;
     const updatedRoom = { ...currentRoom, description: newContext };
@@ -620,6 +635,7 @@ export const App: React.FC = () => {
         onCreateRoom={handleCreateRoom}
         onJoinRoom={handleJoinRoom}
         messageCounts={messageCounts}
+        onDeleteRoom={handleDeleteRoom}
       />
 
       {/* D&D Dice Roller Modal */}
@@ -682,6 +698,7 @@ export const App: React.FC = () => {
         onLeaveRoom={handleLeaveRoom}
         onLogout={handleLogout}
         onUploadBackground={handleUploadRoomBackground}
+        onDeleteRoom={handleDeleteRoom}
       />
 
       {/* Room Photo Gallery Modal */}

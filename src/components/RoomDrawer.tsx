@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Plus, Key, Sparkles, Compass, Share2, Copy, Check } from 'lucide-react';
+import { X, Plus, Key, Sparkles, Compass, Share2, Copy, Check, Trash2 } from 'lucide-react';
 import { Room } from '../types';
 import { SoundEffects } from '../utils/sound';
 
@@ -12,6 +12,7 @@ interface RoomDrawerProps {
   onCreateRoom: (name: string, desc: string, bg: string) => void;
   onJoinRoom: (code: string) => void;
   messageCounts: Record<string, number>;
+  onDeleteRoom?: (roomId: string) => void;
 }
 
 export const RoomDrawer: React.FC<RoomDrawerProps> = ({
@@ -23,6 +24,7 @@ export const RoomDrawer: React.FC<RoomDrawerProps> = ({
   onCreateRoom,
   onJoinRoom,
   messageCounts,
+  onDeleteRoom,
 }) => {
   const [mode, setMode] = useState<'list' | 'create' | 'join'>('list');
   const [newRoomName, setNewRoomName] = useState('');
@@ -250,15 +252,33 @@ export const RoomDrawer: React.FC<RoomDrawerProps> = ({
                               {isActive && <Sparkles className="w-3.5 h-3.5 text-genshin-gold shrink-0" />}
                               {room.name}
                             </span>
-                            <button
-                              type="button"
-                              onClick={(e) => handleCopyCode(e, room)}
-                              className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 hover:bg-genshin-gold/30 text-genshin-gold border border-genshin-gold/40 font-mono shrink-0 flex items-center gap-1"
-                              title="Copiar código de invitación"
-                            >
-                              {isCopied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
-                              <span>{isCopied ? 'Copiado' : room.inviteCode}</span>
-                            </button>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyCode(e, room)}
+                                className="text-[10px] px-1.5 py-0.5 rounded bg-black/50 hover:bg-genshin-gold/30 text-genshin-gold border border-genshin-gold/40 font-mono flex items-center gap-1"
+                                title="Copiar código de invitación"
+                              >
+                                {isCopied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                                <span>{isCopied ? 'Copiado' : room.inviteCode}</span>
+                              </button>
+                              {onDeleteRoom && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (window.confirm(`¿Seguro que deseas eliminar la sala "${room.name}" y todos sus mensajes para siempre?`)) {
+                                      SoundEffects.playCriticalFail();
+                                      onDeleteRoom(room.id);
+                                    }
+                                  }}
+                                  className="p-1 rounded bg-black/50 hover:bg-red-950/80 text-slate-400 hover:text-red-400 border border-slate-700 hover:border-red-500/50 transition-colors"
+                                  title="Eliminar esta sala por completo"
+                                >
+                                  <Trash2 className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           <p className="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">

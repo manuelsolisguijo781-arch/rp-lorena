@@ -347,6 +347,25 @@ export const dbService = {
       .eq('id', `mem_${roomId}_${userId}`);
   },
 
+  async deleteRoom(roomId: string, userId: string): Promise<void> {
+    // 1. Delete all messages of the room
+    await supabase.from('messages').delete().eq('room_id', roomId);
+    // 2. Delete membership records for this room
+    await supabase.from('characters').delete().eq('name', roomId);
+    // 3. Delete the room itself
+    await supabase.from('rooms').delete().eq('id', roomId);
+
+    // 4. Clean local storage for this user
+    const localKey = `rp_joined_rooms_${userId}`;
+    try {
+      const localSaved: string[] = JSON.parse(localStorage.getItem(localKey) || '[]');
+      const filtered = localSaved.filter((id) => id !== roomId);
+      localStorage.setItem(localKey, JSON.stringify(filtered));
+    } catch {
+      // ignore
+    }
+  },
+
   // --- MESSAGES ---
 
   async fetchMessagesForRoom(roomId: string): Promise<Message[]> {

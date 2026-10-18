@@ -13,6 +13,7 @@ interface SettingsModalProps {
   onLeaveRoom?: (roomId: string) => void;
   onLogout: () => void;
   onUploadBackground?: (file: File) => Promise<void>;
+  onDeleteRoom?: (roomId: string) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -25,9 +26,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onLeaveRoom,
   onLogout,
   onUploadBackground,
+  onDeleteRoom,
 }) => {
   const [confirmClear, setConfirmClear] = useState(false);
   const [confirmLeave, setConfirmLeave] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [isUploadingBg, setIsUploadingBg] = useState(false);
   const bgInputRef = useRef<HTMLInputElement>(null);
 
@@ -246,6 +249,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="text-xs text-left text-amber-400/80 hover:text-amber-300 underline"
                     >
                       Abandonar esta sala
+                    </button>
+                  )
+                )}
+
+                {/* Delete Entire Room Permanently */}
+                {onDeleteRoom && (
+                  confirmDelete ? (
+                    <div className="space-y-2 p-2.5 bg-red-950/70 rounded-xl border border-red-600/70 animate-fadeIn">
+                      <p className="text-[11px] text-red-200 font-bold flex items-center gap-1.5">
+                        <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                        ¿Eliminar esta sala para siempre?
+                      </p>
+                      <p className="text-[10px] text-red-300/80 leading-relaxed">
+                        Se borrará la sala <strong>{currentRoom.name}</strong>, su código y todos los mensajes y fotos asociados de la nube.
+                      </p>
+                      <div className="flex gap-2 pt-1">
+                        <button
+                          onClick={() => {
+                            SoundEffects.playCriticalFail();
+                            onDeleteRoom(currentRoom.id);
+                            setConfirmDelete(false);
+                            onClose();
+                          }}
+                          className="flex-1 py-1.5 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md active:scale-95 transition-all"
+                        >
+                          Sí, Borrar Sala
+                        </button>
+                        <button
+                          onClick={() => setConfirmDelete(false)}
+                          className="flex-1 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-xs"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setConfirmDelete(true)}
+                      className="text-xs text-left text-red-400 hover:text-red-300 font-bold flex items-center gap-1.5 pt-1.5 border-t border-red-950/40"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Borrar sala permanentemente</span>
                     </button>
                   )
                 )}
