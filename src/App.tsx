@@ -53,6 +53,13 @@ export const App: React.FC = () => {
   const [isCharacterSheetOpen, setIsCharacterSheetOpen] = useState(false);
   const [selectedPhotoUrl, setSelectedPhotoUrl] = useState<string | null>(null);
 
+  // Presence & Typing indicator states
+  const [isPartnerOnline, setIsPartnerOnline] = useState(false);
+  const [partnerName, setPartnerName] = useState<string>('');
+  const [typingUser, setTypingUser] = useState<string | null>(null);
+
+  const presenceChannelRef = useRef<any>(null);
+  const typingClearTimeoutRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const roomsRef = useRef<Room[]>([]);
   useEffect(() => {
@@ -138,8 +145,27 @@ export const App: React.FC = () => {
       .channel('realtime:roleplay_app')
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
+          if (payload.eventType === 'UPDATE') {
+            const m = payload.new as any;
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === m.id
+                  ? {
+                      ...msg,
+                      diceRoll: m.dice_roll || msg.diceRoll,
+                      challenge: m.dice_roll?.challenge || msg.challenge,
+                      content: m.content || msg.content,
+                    }
+                  : msg
+              )
+            );
+            return;
+          }
+
+          if (payload.eventType !== 'INSERT') return;
+
           const m = payload.new as any;
           let parsedImages: string[] = [];
           if (m.image_url) {
@@ -178,7 +204,7 @@ export const App: React.FC = () => {
           const currentRoomIdSnapshot = currentRoomId;
           if (incomingMsg.roomId !== currentRoomIdSnapshot) {
             // Still send a notification if the user is a member of that room and it's from someone else
-            const isMemberOfRoom = roomsRef.current.some((r) => r.id === incomingMsg.roomId);
+            const isMemberOfRoom = roomsRef.current.length === 0 || roomsRef.current.some((r) => r.id === incomingMsg.roomId);
             if (isMemberOfRoom && m.character_id !== currentPlayer.id) {
               notificationService.notify(
                 incomingMsg.senderName,
@@ -256,6 +282,164 @@ export const App: React.FC = () => {
       isMounted = false;
     };
   }, [currentRoomId]);
+
+  // ─── Realtime Presence (Online Status) & Ephemeral Typing Broadcast ───
+  useEffect(() => {
+    if (!currentRoomId || !player) {
+      setIsPartnerOnline(false);
+      setTypingUser(null);
+      return;
+    }
+
+    const currentPlayer = player;
+    const pChannel = supabase.channel(`presence:${currentRoomId}`, {
+      config: {
+        presence: { key: currentPlayer.id },
+        broadcast: { ack: false },
+      },
+    });
+
+    presenceChannelRef.current = pChannel;
+
+    pChannel
+      .on('presence', { event: 'sync' }, () => {
+        const state = pChannel.presenceState();
+        let foundPartner = false;
+        let partnerDisplay = '';
+        Object.entries(state).forEach(([key, presences]: [string, any]) => {
+          if (key !== currentPlayer.id && presences && presences.length > 0) {
+            foundPartner = true;
+            partnerDisplay = presences[0].displayName || presences[0].username || '';
+          }
+        });
+        setIsPartnerOnline(foundPartner);
+        if (partnerDisplay) setPartnerName(partnerDisplay);
+      })
+      .on('presence', { event: 'join' }, ({ newPresences }) => {
+        if (newPresences && newPresences.length > 0) {
+          const other = newPresences.find((p: any) => p.userId !== currentPlayer.id);
+          if (other) {
+            setIsPartnerOnline(true);
+            setPartnerName(other.displayName || other.username || '');
+          }
+        }
+      })
+      .on('presence', { event: 'leave' }, () => {
+        const state = pChannel.presenceState();
+        let stillFound = false;
+        Object.entries(state).forEach(([key, presences]: [string, any]) => {
+          if (key !== currentPlayer.id && presences && presences.length > 0) {
+            stillFound = true;
+          }
+        });
+        setIsPartnerOnline(stillFound);
+      })
+      .on('broadcast', { event: 'typing' }, (msg) => {
+        const payload = msg.payload;
+        if (payload && payload.userId !== currentPlayer.id) {
+          if (payload.isTyping) {
+            setTypingUser(payload.displayName || 'Tu pareja');
+            if (typingClearTimeoutRef.current) clearTimeout(typingClearTimeoutRef.current);
+            typingClearTimeoutRef.current = setTimeout(() => {
+              setTypingUser(null);
+            }, 3000);
+          } else {
+            setTypingUser(null);
+          }
+        }
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await pChannel.track({
+            userId: currentPlayer.id,
+            username: currentPlayer.username,
+            displayName: currentPlayer.displayName,
+            onlineAt: Date.now(),
+          });
+        }
+      });
+
+    return () => {
+      if (typingClearTimeoutRef.current) clearTimeout(typingClearTimeoutRef.current);
+      supabase.removeChannel(pChannel);
+      presenceChannelRef.current = null;
+      setIsPartnerOnline(false);
+      setTypingUser(null);
+    };
+  }, [currentRoomId, player]);
+
+  const handleTyping = (isTyping: boolean) => {
+    if (!presenceChannelRef.current || !player) return;
+    try {
+      presenceChannelRef.current.send({
+        type: 'broadcast',
+        event: 'typing',
+        payload: {
+          userId: player.id,
+          displayName: player.displayName,
+          isTyping,
+        },
+      });
+    } catch {
+      // ignore
+    }
+  };
+
+  // ─── Reconnection & Visibility Change Listener (Solves missed messages / sleep drops) ───
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (currentRoomId) {
+          dbService.fetchMessagesForRoom(currentRoomId).then((freshMsgs) => {
+            setMessages(freshMsgs);
+          });
+        }
+        if (presenceChannelRef.current && player) {
+          presenceChannelRef.current.track({
+            userId: player.id,
+            username: player.username,
+            displayName: player.displayName,
+            onlineAt: Date.now(),
+          }).catch(() => {});
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [currentRoomId, player]);
+
+  // ─── Periodic Heartbeat Sync (catches any missed message every 15s) ───
+  useEffect(() => {
+    if (!currentRoomId || !player) return;
+
+    const syncInterval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        dbService.fetchMessagesForRoom(currentRoomId).then((cloudMsgs) => {
+          setMessages((prev) => {
+            if (cloudMsgs.length > prev.length) {
+              const lastPrevTime = prev.length > 0 ? prev[prev.length - 1].timestamp : 0;
+              const newFromOther = cloudMsgs.filter(
+                (m) => m.timestamp > lastPrevTime && m.senderId !== player.id
+              );
+              if (newFromOther.length > 0) {
+                const latest = newFromOther[newFromOther.length - 1];
+                notificationService.notify(
+                  latest.senderName,
+                  latest.content || (latest.imageUrl ? '📷 Te ha enviado una foto' : '🎲 Ha lanzado los dados'),
+                  latest.senderAvatar
+                );
+              }
+              return cloudMsgs;
+            }
+            return prev;
+          });
+        });
+      }
+    }, 15000);
+
+    return () => clearInterval(syncInterval);
+  }, [currentRoomId, player]);
 
   // Current active room
   const currentRoom = rooms.find((r) => r.id === currentRoomId) || null;
@@ -536,6 +720,9 @@ export const App: React.FC = () => {
       <Header
         currentRoom={currentRoom}
         player={player}
+        isPartnerOnline={isPartnerOnline}
+        partnerName={partnerName}
+        typingUser={typingUser}
         onOpenRoomDrawer={() => setIsRoomDrawerOpen(true)}
         onOpenDiceModal={() => setIsDiceModalOpen(true)}
         onOpenSettings={() => setIsSettingsOpen(true)}
@@ -616,11 +803,24 @@ export const App: React.FC = () => {
             <div ref={messagesEndRef} className="h-2" />
           </main>
 
+          {/* Floating Typing Indicator Bubble */}
+          {typingUser && (
+            <div className="relative z-10 px-4 py-1.5 bg-genshin-panel/95 border-t border-genshin-gold/30 backdrop-blur-md flex items-center gap-2 text-xs text-amber-200 font-serif italic animate-fadeIn shadow-sm">
+              <span className="flex gap-1 items-center">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-bounce" style={{ animationDelay: '300ms' }} />
+              </span>
+              <span>{typingUser} está escribiendo...</span>
+            </div>
+          )}
+
           {/* Input Bottom Bar */}
           <MessageInput
             player={player}
             onSendMessage={handleSendMessage}
             onOpenDiceModal={() => setIsDiceModalOpen(true)}
+            onTyping={handleTyping}
           />
         </>
       )}

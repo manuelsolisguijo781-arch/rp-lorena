@@ -4,7 +4,7 @@
 // for SW control. Forces immediate claim and handles push events.
 // ============================================================
 
-const CACHE_NAME = 'rp-lorena-v2';
+const CACHE_NAME = 'rp-lorena-v3';
 const STATIC_ASSETS = [
   '/rp-lorena/',
   '/rp-lorena/index.html',
@@ -60,24 +60,34 @@ self.addEventListener('fetch', (event) => {
 });
 
 // ─── Push: Receive a server-side push notification ────────────────
-// (Useful for future real server push; also handles background msgs)
+// Handles Apple APNs and Google FCM web push notifications
 self.addEventListener('push', (event) => {
   let data = { title: 'Crónicas de Rol ✨', body: '💬 Nuevo mensaje en la historia.' };
-  try {
-    if (event.data) data = event.data.json();
-  } catch {
-    // ignore parse errors
+  if (event.data) {
+    try {
+      data = event.data.json();
+    } catch {
+      try {
+        const text = event.data.text();
+        if (text) data.body = text;
+      } catch {}
+    }
   }
 
-  event.waitUntil(
-    self.registration.showNotification(data.title, {
-      body: data.body,
-      icon: '/rp-lorena/genshin-icon.svg',
-      badge: '/rp-lorena/genshin-icon.svg',
-      tag: `rp-push-${Date.now()}`,
-      renotify: true,
-    })
-  );
+  const title = data.title || 'Crónicas de Rol ✨';
+  const options = {
+    body: data.body || '💬 Tienes un nuevo mensaje en la historia.',
+    icon: data.icon || '/rp-lorena/genshin-icon.svg',
+    badge: '/rp-lorena/genshin-icon.svg',
+    tag: data.tag || `rp-push-${Date.now()}`,
+    renotify: true,
+    vibrate: [200, 100, 200],
+    data: {
+      url: data.url || '/rp-lorena/',
+    },
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
 });
 
 // ─── Notification Click: open or focus the PWA window ────────────

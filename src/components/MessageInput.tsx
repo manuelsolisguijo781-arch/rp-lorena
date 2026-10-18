@@ -7,6 +7,7 @@ interface MessageInputProps {
   player: Player;
   onSendMessage: (content: string, expression: Expression, imageFiles?: File[], isSecret?: boolean) => void;
   onOpenDiceModal: () => void;
+  onTyping?: (isTyping: boolean) => void;
 }
 
 const VOICE_PRESETS = [
@@ -21,6 +22,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   player,
   onSendMessage,
   onOpenDiceModal,
+  onTyping,
 }) => {
   const [content, setContent] = useState('');
   const [isSecret, setIsSecret] = useState(false);
@@ -30,9 +32,22 @@ export const MessageInput: React.FC<MessageInputProps> = ({
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const typingTimeoutRef = useRef<any>(null);
+
+  const triggerTyping = () => {
+    if (!onTyping) return;
+    onTyping(true);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      onTyping(false);
+    }, 2500);
+  };
 
   const handleSend = () => {
     if (!content.trim() && selectedImages.length === 0) return;
+
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    onTyping?.(false);
 
     SoundEffects.playSend();
     onSendMessage(
@@ -159,9 +174,16 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             rows={1}
             value={content}
             onChange={(e) => {
-              setContent(e.target.value);
+              const val = e.target.value;
+              setContent(val);
               e.target.style.height = 'auto';
               e.target.style.height = `${Math.min(e.target.scrollHeight, 120)}px`;
+              if (val.trim().length > 0) {
+                triggerTyping();
+              } else {
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                onTyping?.(false);
+              }
             }}
             onKeyDown={handleKeyDown}
             placeholder={

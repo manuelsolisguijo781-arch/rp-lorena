@@ -7,6 +7,9 @@ import { notificationService } from '../utils/notifications';
 interface HeaderProps {
   currentRoom: Room | null;
   player: Player;
+  isPartnerOnline?: boolean;
+  partnerName?: string;
+  typingUser?: string | null;
   onOpenRoomDrawer: () => void;
   onOpenDiceModal: () => void;
   onOpenSettings: () => void;
@@ -20,6 +23,9 @@ interface HeaderProps {
 export const Header: React.FC<HeaderProps> = ({
   currentRoom,
   player,
+  isPartnerOnline = false,
+  partnerName,
+  typingUser,
   onOpenRoomDrawer,
   onOpenDiceModal,
   onOpenSettings,
@@ -101,9 +107,24 @@ export const Header: React.FC<HeaderProps> = ({
             )}
           </div>
           {currentRoom && (
-            <p className="text-[10px] sm:text-[11px] text-slate-400 truncate max-w-[110px] sm:max-w-xs">
-              {currentRoom.description}
-            </p>
+            <div className="flex items-center gap-1.5 min-w-0 mt-0.5">
+              {typingUser ? (
+                <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-amber-300 font-serif font-bold animate-pulse truncate">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping shrink-0" />
+                  <span className="truncate">{typingUser} está escribiendo...</span>
+                </div>
+              ) : isPartnerOnline ? (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-emerald-400 font-medium truncate">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0 shadow-[0_0_8px_rgba(52,211,153,0.8)]" />
+                  <span className="truncate">{partnerName ? `${partnerName} • En línea` : 'En línea'}</span>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-slate-400 truncate max-w-[120px] sm:max-w-xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-slate-500 shrink-0" />
+                  <span className="truncate">{currentRoom.description || 'Desconectado/a'}</span>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>

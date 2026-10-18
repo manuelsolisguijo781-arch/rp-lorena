@@ -11,9 +11,25 @@ function getAudioContext(): AudioContext {
     audioCtx = new AudioContextClass();
   }
   if (audioCtx.state === 'suspended') {
-    audioCtx.resume();
+    audioCtx.resume().catch(() => {});
   }
   return audioCtx;
+}
+
+// Auto-unlock AudioContext on first user touch/click for mobile browsers (iOS/Android)
+if (typeof window !== 'undefined') {
+  const unlockAudio = () => {
+    try {
+      const ctx = getAudioContext();
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+  };
+  window.addEventListener('click', unlockAudio, { passive: true, once: false });
+  window.addEventListener('touchstart', unlockAudio, { passive: true, once: false });
 }
 
 export const SoundEffects = {
@@ -42,6 +58,39 @@ export const SoundEffects = {
       osc.stop(now + 0.4);
     } catch {
       // Audio might be blocked by browser policy until user interaction
+    }
+  },
+
+  /**
+   * Pleasant crystalline double-chime for incoming roleplay message
+   */
+  playReceive: () => {
+    try {
+      const ctx = getAudioContext();
+      const now = ctx.currentTime;
+
+      // Two ascending celestial bells (G5 784Hz -> C6 1046.5Hz)
+      const freqs = [783.99, 1046.5];
+      freqs.forEach((freq, idx) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        const startTime = now + idx * 0.09;
+
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(freq, startTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.05, startTime + 0.25);
+
+        gain.gain.setValueAtTime(0.18, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
+
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+
+        osc.start(startTime);
+        osc.stop(startTime + 0.4);
+      });
+    } catch {
+      // Ignore
     }
   },
 

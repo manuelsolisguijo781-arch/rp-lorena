@@ -160,26 +160,26 @@ class NotificationService {
     }
   }
 
+  isPermissionGranted(): boolean {
+    return this.isSupported() && Notification.permission === 'granted';
+  }
+
   notify(title: string, body: string, iconUrl?: string): void {
     // 0. Check master enabled switch and browser permission
     if (!this.preferences.enabled) {
       return; // Silenced!
     }
 
-    if (!this.isSupported() || Notification.permission !== 'granted') {
-      return;
-    }
-
     // 1. Play Sound (if enabled)
     if (this.preferences.sound) {
       try {
-        SoundEffects.playSend();
+        SoundEffects.playReceive();
       } catch {
         // ignore
       }
     }
 
-    // 2. Trigger Mobile Vibration (if enabled)
+    // 2. Trigger Mobile Vibration (if enabled and supported)
     if (this.preferences.vibration && 'vibrate' in navigator) {
       try {
         navigator.vibrate([150, 80, 150]);
@@ -188,24 +188,48 @@ class NotificationService {
       }
     }
 
+    if (!this.isSupported() || Notification.permission !== 'granted') {
+      return;
+    }
+
     // 3. Discrete Mode check: hides message text for lockscreen privacy
     const finalTitle = this.preferences.discreteMode ? 'Crónicas de Rol ✨' : title;
     const finalBody = this.preferences.discreteMode
       ? '💬 Tienes un nuevo mensaje secreto en la historia.'
       : body;
 
-    // 4. Display System Notification — unique tag so every message stacks (not replaced)
-    const options: NotificationOptions = {
+    // 4. Display System Notification
+    const options: any = {
       body: finalBody,
       icon: iconUrl || '/rp-lorena/genshin-icon.svg',
       badge: '/rp-lorena/genshin-icon.svg',
-      tag: `rp-msg-${Date.now()}`,  // unique per message → never collapses previous ones
+      tag: `rp-msg-${Date.now()}`,
       silent: !this.preferences.sound,
+      renotify: true,
     };
 
-    if (this.swRegistration && 'showNotification' in this.swRegistration) {
-      this.swRegistration.showNotification(finalTitle, options);
-    } else {
+    // Safely trigger via Service Worker (standard for iOS PWA and Android Chrome)
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready
+        .then((reg) => {
+          this.swRegistration = reg;
+          return reg.showNotification(finalTitle, options);
+        })
+        .catch((err) => {
+          console.warn('Service worker showNotification fallback:', err);
+          if (this.isSupported()) {
+            try {
+              const notif = new Notification(finalTitle, options);
+              notif.onclick = () => {
+                window.focus();
+                notif.close();
+              };
+            } catch {
+              // ignore
+            }
+          }
+        });
+    } else if (this.isSupported()) {
       try {
         const notif = new Notification(finalTitle, options);
         notif.onclick = () => {
@@ -213,7 +237,7 @@ class NotificationService {
           notif.close();
         };
       } catch (e) {
-        console.warn('Notification instantiation fallback failed:', e);
+        console.warn('Desktop notification failed:', e);
       }
     }
   }
