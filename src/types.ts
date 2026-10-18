@@ -17,6 +17,8 @@ export type DiceType = 'd20' | 'd100' | 'd12' | 'd10' | 'd8' | 'd6' | 'd4';
 
 export type RollOutcome = 'critical_success' | 'success' | 'mixed' | 'failure' | 'critical_failure';
 
+export type RollAdvantage = 'normal' | 'advantage' | 'disadvantage';
+
 export interface ChallengeData {
   challengerId: string;
   challengerName: string;
@@ -40,6 +42,9 @@ export interface DiceRoll {
   outcome: RollOutcome;
   description?: string;
   challenge?: ChallengeData;
+  advantage?: RollAdvantage;
+  rolls?: number[];
+  discardedRoll?: number;
 }
 
 export interface MessageBlock {

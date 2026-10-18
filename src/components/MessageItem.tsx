@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Message, Expression } from '../types';
-import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle, Eye, Lock, Swords } from 'lucide-react';
+import { Sparkles, Dices, ShieldAlert, CheckCircle, AlertCircle, Eye, Lock, Swords, ArrowUpCircle, ArrowDownCircle } from 'lucide-react';
 import { SoundEffects } from '../utils/sound';
 
 interface MessageItemProps {
@@ -114,12 +114,26 @@ export const MessageItem: React.FC<MessageItemProps> = ({
               /* --- DADO DESAFÍO / DUELO OPUESTO CARD --- */
               <div className="mb-2.5 p-3.5 rounded-2xl border bg-gradient-to-r from-red-950/70 via-amber-950/50 to-yellow-950/40 border-red-500/60 shadow-lg backdrop-blur-md">
                 <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="font-serif font-bold text-amber-200 flex items-center gap-1.5">
-                    <Swords className="w-4 h-4 text-red-400 animate-pulse" />
-                    {message.diceRoll.actionName}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-serif font-bold text-amber-200 flex items-center gap-1.5">
+                      <Swords className="w-4 h-4 text-red-400 animate-pulse" />
+                      {message.diceRoll.actionName}
+                    </span>
+                    {message.diceRoll.advantage === 'advantage' && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 font-serif flex items-center gap-0.5">
+                        <ArrowUpCircle className="w-2.5 h-2.5" />
+                        Ventaja
+                      </span>
+                    )}
+                    {message.diceRoll.advantage === 'disadvantage' && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/50 font-serif flex items-center gap-0.5">
+                        <ArrowDownCircle className="w-2.5 h-2.5" />
+                        Desventaja
+                      </span>
+                    )}
+                  </div>
                   <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-red-900/60 text-red-200 border border-red-500/50">
-                    Duelo Opuesto
+                    Duelo D&D
                   </span>
                 </div>
 
@@ -135,9 +149,16 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                       <span className="text-slate-300">
                         <strong>{message.diceRoll.challenge.challengerName}</strong> sacó:
                       </span>
-                      <span className="text-xl font-serif font-bold text-genshin-gold">
-                        {message.diceRoll.challenge.challengerRoll}
-                      </span>
+                      <div className="flex items-baseline gap-2">
+                        {message.diceRoll.rolls && message.diceRoll.rolls.length > 1 && (
+                          <span className="text-[10px] text-slate-400 font-mono bg-black/40 px-1.5 py-0.5 rounded border border-slate-700">
+                            [{message.diceRoll.rollValue}] <span className="line-through text-slate-500">({message.diceRoll.discardedRoll})</span>
+                          </span>
+                        )}
+                        <span className="text-xl font-serif font-bold text-genshin-gold">
+                          {message.diceRoll.challenge.challengerRoll}
+                        </span>
+                      </div>
                     </div>
 
                     {currentUserId !== message.senderId ? (
@@ -195,10 +216,24 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 }`}
               >
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-serif font-bold text-genshin-gold flex items-center gap-1.5">
-                    <Dices className="w-4 h-4 text-genshin-gold" />
-                    {message.diceRoll.actionName}
-                  </span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-serif font-bold text-genshin-gold flex items-center gap-1.5">
+                      <Dices className="w-4 h-4 text-genshin-gold" />
+                      {message.diceRoll.actionName}
+                    </span>
+                    {message.diceRoll.advantage === 'advantage' && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-950/80 text-emerald-300 border border-emerald-500/50 font-serif flex items-center gap-0.5">
+                        <ArrowUpCircle className="w-2.5 h-2.5" />
+                        Ventaja (Mayor)
+                      </span>
+                    )}
+                    {message.diceRoll.advantage === 'disadvantage' && (
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-rose-950/80 text-rose-300 border border-rose-500/50 font-serif flex items-center gap-0.5">
+                        <ArrowDownCircle className="w-2.5 h-2.5" />
+                        Desventaja (Menor)
+                      </span>
+                    )}
+                  </div>
                   <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-black/40 text-slate-300 border border-slate-700">
                     {message.diceRoll.diceType}
                   </span>
@@ -211,18 +246,31 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                 )}
 
                 <div className="flex items-center justify-between pt-1 border-t border-slate-800/80">
-                  <div className="flex items-baseline gap-2">
+                  <div className="flex items-baseline gap-2 flex-wrap">
                     <span className="text-xl sm:text-2xl font-serif font-bold text-amber-100">
                       {message.diceRoll.total}
                     </span>
-                    {message.diceRoll.modifier !== 0 && (
-                      <span className="text-[10px] text-slate-400 font-mono">
-                        (dado: {message.diceRoll.rollValue}{' '}
-                        {message.diceRoll.modifier > 0
-                          ? `+ ${message.diceRoll.modifier}`
-                          : message.diceRoll.modifier}
-                        )
+                    {message.diceRoll.rolls && message.diceRoll.rolls.length > 1 ? (
+                      <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded-lg border border-slate-700">
+                        <span>dados:</span>
+                        <span className="font-bold text-genshin-gold">[{message.diceRoll.rollValue}]</span>
+                        <span className="line-through text-slate-500">({message.diceRoll.discardedRoll})</span>
+                        {message.diceRoll.modifier !== 0 && (
+                          <span className="text-slate-300">
+                            {message.diceRoll.modifier > 0 ? `+${message.diceRoll.modifier}` : message.diceRoll.modifier}
+                          </span>
+                        )}
                       </span>
+                    ) : (
+                      message.diceRoll.modifier !== 0 && (
+                        <span className="text-[10px] text-slate-400 font-mono">
+                          (dado: {message.diceRoll.rollValue}{' '}
+                          {message.diceRoll.modifier > 0
+                            ? `+ ${message.diceRoll.modifier}`
+                            : message.diceRoll.modifier}
+                          )
+                        </span>
+                      )
                     )}
                   </div>
 

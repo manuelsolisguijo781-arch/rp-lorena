@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { X, Dices, Sparkles, Swords, Shield, Heart, Zap } from 'lucide-react';
+import { X, Dices, Sparkles, Swords, Shield, Zap, Brain, Eye, Flame, ArrowUpCircle, ArrowDownCircle, Check } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { DiceType, DiceRoll, RollOutcome, ChallengeData, Player } from '../types';
+import { DiceType, DiceRoll, RollOutcome, RollAdvantage, ChallengeData, Player } from '../types';
 import { SoundEffects } from '../utils/sound';
 
 interface DiceModalProps {
@@ -21,26 +21,95 @@ const DICE_TYPES: { type: DiceType; max: number; label: string }[] = [
   { type: 'd4', max: 4, label: 'd4' },
 ];
 
-const STANDARD_ACTION_PRESETS = [
-  { name: 'Persuasión / Seducción', desc: 'Cautivar con palabras, miradas o gestos' },
-  { name: 'Sigilo / Susurros', desc: 'Acercarse o susurrar sin ser anticipado' },
-  { name: 'Percepción / Intuición', desc: 'Leer sus verdaderas emociones o deseos' },
-  { name: 'Destreza / Agilidad', desc: 'Movimientos precisos, rápidos y sutiles' },
-  { name: 'Fuerza / Pasión', desc: 'Acciones intensas, abrazos firmes o audaces' },
-  { name: 'Tirada Libre', desc: 'Cualquier acción del momento' },
+const DND_STAT_PRESETS = [
+  {
+    name: 'Fuerza',
+    code: 'FUE',
+    icon: '💪',
+    desc: 'Atletismo, potencia física, forcejeo o derribar',
+  },
+  {
+    name: 'Destreza',
+    code: 'DES',
+    icon: '⚡',
+    desc: 'Acrobacias, sigilo, agilidad y reflejos rápidos',
+  },
+  {
+    name: 'Constitución',
+    code: 'CON',
+    icon: '🛡️',
+    desc: 'Resistencia física, vigor, aguante y fortaleza',
+  },
+  {
+    name: 'Intelecto',
+    code: 'INT',
+    icon: '🧠',
+    desc: 'Lógica, investigación, memoria y conocimiento',
+  },
+  {
+    name: 'Sabiduría',
+    code: 'SAB',
+    icon: '👁️',
+    desc: 'Percepción, intuición, perspicacia y voluntad',
+  },
+  {
+    name: 'Carisma',
+    code: 'CAR',
+    icon: '✨',
+    desc: 'Persuasión, seducción, engaño e intimidación',
+  },
+  {
+    name: 'Tirada Libre',
+    code: 'ROL',
+    icon: '🎲',
+    desc: 'Cualquier acción o prueba personalizada',
+  },
 ];
 
-const CHALLENGE_PRESETS = [
-  { name: 'Desafío de Seducción vs Voluntad', desc: 'Intentar quebrar su resistencia con encanto' },
-  { name: 'Desafío de Dominio vs Rebeldía', desc: 'Someter o resistir el control del otro' },
-  { name: 'Duelo de Miradas / Tensión', desc: 'Quién aparta la mirada primero' },
-  { name: 'Desafío de Caricias / Resistencia', desc: 'Aguantar el cosquilleo o la caricia sin ceder' },
+const DND_CHALLENGE_PRESETS = [
+  {
+    name: 'Duelo de Fuerza',
+    code: 'FUE',
+    icon: '💪',
+    desc: 'Forcejeo físico, inmovilizar o medir pura fuerza',
+  },
+  {
+    name: 'Duelo de Destreza',
+    code: 'DES',
+    icon: '⚡',
+    desc: 'Velocidad de reacción o agilidad felina',
+  },
+  {
+    name: 'Duelo de Constitución',
+    code: 'CON',
+    icon: '🛡️',
+    desc: 'Resistir caricias, cosquilleo, dolor o fatiga',
+  },
+  {
+    name: 'Duelo de Intelecto',
+    code: 'INT',
+    icon: '🧠',
+    desc: 'Juegos de ingenio, adivinanzas o astucia táctica',
+  },
+  {
+    name: 'Duelo de Sabiduría',
+    code: 'SAB',
+    icon: '👁️',
+    desc: 'Duelo de miradas fijas o tensión de voluntades',
+  },
+  {
+    name: 'Duelo de Carisma',
+    code: 'CAR',
+    icon: '✨',
+    desc: 'Seducción, dominación, encanto y magnetismo',
+  },
 ];
 
 export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, onSendRoll }) => {
   const [mode, setMode] = useState<'standard' | 'challenge'>('standard');
   const [selectedDice, setSelectedDice] = useState<DiceType>('d20');
-  const [selectedAction, setSelectedAction] = useState('Persuasión / Seducción');
+  const [selectedAction, setSelectedAction] = useState('Fuerza');
+  const [advantage, setAdvantage] = useState<RollAdvantage>('normal');
   const [actionDesc, setActionDesc] = useState('');
   const [modifier, setModifier] = useState<number>(0);
   const [isRolling, setIsRolling] = useState(false);
@@ -53,9 +122,29 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
     setIsRolling(true);
     SoundEffects.playDiceRattle();
 
-    // Rattle animation duration: commits directly to chat!
+    // Rattle animation duration: commits directly to chat (Anti-trampas)!
     setTimeout(() => {
-      const rawValue = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+      let rawValue: number;
+      let discardedRoll: number | undefined = undefined;
+      let rolls: number[] = [];
+
+      if (advantage === 'advantage') {
+        const d1 = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+        const d2 = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+        rawValue = Math.max(d1, d2);
+        discardedRoll = Math.min(d1, d2);
+        rolls = [d1, d2];
+      } else if (advantage === 'disadvantage') {
+        const d1 = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+        const d2 = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+        rawValue = Math.min(d1, d2);
+        discardedRoll = Math.max(d1, d2);
+        rolls = [d1, d2];
+      } else {
+        rawValue = Math.floor(Math.random() * currentDiceConfig.max) + 1;
+        rolls = [rawValue];
+      }
+
       const total = rawValue + modifier;
 
       let outcome: RollOutcome = 'mixed';
@@ -91,6 +180,9 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
         outcome: outcome,
         description: actionDesc.trim() || undefined,
         challenge: challengeData,
+        advantage: advantage,
+        rolls: rolls,
+        discardedRoll: discardedRoll,
       };
 
       if (outcome === 'critical_success') {
@@ -108,11 +200,18 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
       }
 
       // Auto-send immediately so rolls cannot be repeated in secret
+      const advLabel =
+        advantage === 'advantage'
+          ? ' (con Ventaja 🟢)'
+          : advantage === 'disadvantage'
+          ? ' (con Desventaja 🔴)'
+          : '';
+
       const optionalMsg = actionDesc.trim()
         ? `*${actionDesc.trim()}*`
         : mode === 'challenge'
-        ? `*${player.displayName} desafía a su pareja con ${selectedAction}. ¡Tira para responder!*`
-        : `*${player.displayName} realiza una tirada de ${selectedAction}.*`;
+        ? `*${player.displayName} reta a un ${selectedAction}${advLabel}. ¡Tira para responder!*`
+        : `*${player.displayName} realiza una tirada de ${selectedAction}${advLabel}.*`;
 
       onSendRoll(rollResult, optionalMsg);
       setIsRolling(false);
@@ -132,7 +231,7 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
                 Mesa de Dados D&D
               </h2>
               <span className="text-[10px] text-amber-300/80 font-mono">
-                Tiradas auténticas (se publican al instante)
+                Tiradas por Estadísticas (Fuerza, Intelecto...)
               </span>
             </div>
           </div>
@@ -154,7 +253,7 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
             onClick={() => {
               SoundEffects.playChime();
               setMode('standard');
-              setSelectedAction('Persuasión / Seducción');
+              setSelectedAction('Fuerza');
             }}
             className={`py-2 px-3 rounded-xl text-xs font-serif font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'standard'
@@ -163,7 +262,7 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
             }`}
           >
             <Dices className="w-4 h-4" />
-            <span>Tirada Estándar</span>
+            <span>Tirada de Estadística</span>
           </button>
 
           <button
@@ -172,7 +271,7 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
               SoundEffects.playChime();
               setMode('challenge');
               setSelectedDice('d20');
-              setSelectedAction('Desafío de Seducción vs Voluntad');
+              setSelectedAction('Duelo de Carisma');
             }}
             className={`py-2 px-3 rounded-xl text-xs font-serif font-bold flex items-center justify-center gap-1.5 transition-all ${
               mode === 'challenge'
@@ -181,7 +280,7 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
             }`}
           >
             <Swords className="w-4 h-4 text-amber-300" />
-            <span>Dado Desafío ⚔️</span>
+            <span>Duelo Opuesto ⚔️</span>
           </button>
         </div>
 
@@ -192,56 +291,133 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
               <Swords className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
               <div>
                 <span className="font-serif font-bold text-amber-200 block mb-0.5">
-                  Duelo de Voluntades (Tirada Opuesta)
+                  Duelo D&D (Tirada Opuesta)
                 </span>
-                Tiras tu dado ahora y en el chat aparecerá un reto directo para tu pareja. Ella/él podrá responder tirando su propio dado para decidir quién gana el duelo.
+                Lanzas tu estadística contra tu pareja. En el chat aparecerá el duelo pendiente y ella/él podrá tirar para ver quién se impone.
               </div>
             </div>
           )}
 
+          {/* D&D Stats Presets */}
+          <div>
+            <label className="text-[11px] font-medium text-genshin-gold block mb-1.5">
+              {mode === 'challenge' ? 'Estadística para el Duelo:' : 'Estadística de la Tirada (Stats D&D):'}
+            </label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+              {(mode === 'challenge' ? DND_CHALLENGE_PRESETS : DND_STAT_PRESETS).map((stat) => (
+                <button
+                  key={stat.name}
+                  type="button"
+                  onClick={() => {
+                    SoundEffects.playChime();
+                    setSelectedAction(stat.name);
+                  }}
+                  className={`text-left p-2 rounded-xl text-xs transition-all border ${
+                    selectedAction === stat.name
+                      ? 'bg-genshin-gold/20 border-genshin-gold text-amber-100 shadow-sm'
+                      : 'bg-genshin-panel/40 border-slate-700/60 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <div className="font-semibold flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 truncate">
+                      <span>{stat.icon}</span>
+                      <span>{stat.name}</span>
+                    </span>
+                    <span className="text-[9px] font-mono opacity-70 bg-black/40 px-1 py-0.2 rounded">
+                      {stat.code}
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 truncate mt-0.5">{stat.desc}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Ventaja / Desventaja Selector */}
+          <div>
+            <label className="text-[11px] font-medium text-genshin-gold block mb-1.5">
+              Mecánica de Dados: Ventaja / Desventaja (D&D 5e)
+            </label>
+            <div className="grid grid-cols-3 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  SoundEffects.playChime();
+                  setAdvantage('normal');
+                }}
+                className={`py-2 px-2 rounded-xl text-xs font-serif font-bold transition-all border flex flex-col items-center gap-0.5 ${
+                  advantage === 'normal'
+                    ? 'bg-slate-700 border-genshin-gold text-amber-100 shadow-sm'
+                    : 'bg-genshin-panel/40 border-slate-700/60 text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                <span>Normal</span>
+                <span className="text-[9px] font-mono text-slate-400 font-normal">1 dado</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  SoundEffects.playCriticalSuccess();
+                  setAdvantage('advantage');
+                }}
+                className={`py-2 px-2 rounded-xl text-xs font-serif font-bold transition-all border flex flex-col items-center gap-0.5 ${
+                  advantage === 'advantage'
+                    ? 'bg-emerald-950/80 border-emerald-400 text-emerald-200 shadow-sm ring-1 ring-emerald-500'
+                    : 'bg-genshin-panel/40 border-slate-700/60 text-emerald-400/70 hover:text-emerald-300'
+                }`}
+              >
+                <span className="flex items-center gap-1">
+                  <ArrowUpCircle className="w-3.5 h-3.5" />
+                  Ventaja
+                </span>
+                <span className="text-[9px] font-mono text-emerald-300/80 font-normal">Toma el MAYOR</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  SoundEffects.playChime();
+                  setAdvantage('disadvantage');
+                }}
+                className={`py-2 px-2 rounded-xl text-xs font-serif font-bold transition-all border flex flex-col items-center gap-0.5 ${
+                  advantage === 'disadvantage'
+                    ? 'bg-rose-950/80 border-rose-400 text-rose-200 shadow-sm ring-1 ring-rose-500'
+                    : 'bg-genshin-panel/40 border-slate-700/60 text-rose-400/70 hover:text-rose-300'
+                }`}
+              >
+                <span className="flex items-center gap-1">
+                  <ArrowDownCircle className="w-3.5 h-3.5" />
+                  Desventaja
+                </span>
+                <span className="text-[9px] font-mono text-rose-300/80 font-normal">Toma el MENOR</span>
+              </button>
+            </div>
+            {advantage !== 'normal' && (
+              <p className="text-[10px] text-slate-400 italic mt-1.5 pl-1">
+                {advantage === 'advantage'
+                  ? '🎲 Se tirarán 2 dados automáticamente y el sistema elegirá el resultado más alto.'
+                  : '🎲 Se tirarán 2 dados automáticamente y el sistema elegirá el resultado más bajo.'}
+              </p>
+            )}
+          </div>
+
           {/* Action description / intention */}
           <div>
             <label className="text-[11px] font-medium text-genshin-gold block mb-1">
-              {mode === 'challenge' ? 'Descripción del Desafío (Opcional)' : '¿Qué intentas hacer? (Opcional)'}
+              Descripción o Narración de la Acción (Opcional):
             </label>
             <input
               type="text"
               placeholder={
                 mode === 'challenge'
-                  ? 'Ej: *se acerca a su cuello susurrando, retándola a no ceder*'
-                  : 'Ej: *acercar su rostro buscando robarle un beso*'
+                  ? 'Ej: *reta con la mirada mientras sonríe con desafío*'
+                  : 'Ej: *intenta derribar la puerta con el hombro*'
               }
               value={actionDesc}
               onChange={(e) => setActionDesc(e.target.value)}
               className="w-full text-xs px-3 py-2.5 rounded-xl bg-genshin-panel/80 border border-genshin-border focus:border-genshin-gold focus:outline-none text-slate-100 placeholder:text-slate-500"
             />
-          </div>
-
-          {/* Action Preset Picker */}
-          <div>
-            <label className="text-[11px] font-medium text-genshin-gold block mb-1">
-              {mode === 'challenge' ? 'Tipo de Duelo / Reto' : 'Tipo de Acción / Intención'}
-            </label>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(mode === 'challenge' ? CHALLENGE_PRESETS : STANDARD_ACTION_PRESETS).map((preset) => (
-                <button
-                  key={preset.name}
-                  type="button"
-                  onClick={() => {
-                    SoundEffects.playChime();
-                    setSelectedAction(preset.name);
-                  }}
-                  className={`text-left p-2 rounded-xl text-xs transition-all border ${
-                    selectedAction === preset.name
-                      ? 'bg-genshin-gold/20 border-genshin-gold text-amber-100 shadow-sm'
-                      : 'bg-genshin-panel/40 border-slate-700/60 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-                  }`}
-                >
-                  <div className="font-semibold truncate">{preset.name}</div>
-                  <div className="text-[10px] text-slate-400 truncate">{preset.desc}</div>
-                </button>
-              ))}
-            </div>
           </div>
 
           {/* Dice Selector & Modifier */}
@@ -313,8 +489,8 @@ export const DiceModal: React.FC<DiceModalProps> = ({ isOpen, onClose, player, o
               {isRolling
                 ? 'Lanzando y publicando...'
                 : mode === 'challenge'
-                ? '¡Lanzar Desafío a la Sala! ⚔️'
-                : '¡Lanzar Dado a la Sala!'}
+                ? `¡Lanzar Duelo de ${selectedAction}! ⚔️`
+                : `¡Lanzar ${selectedAction}! ${advantage === 'advantage' ? '(Ventaja)' : advantage === 'disadvantage' ? '(Desventaja)' : ''}`}
             </span>
           </button>
           <p className="text-[10px] text-center text-slate-400 mt-1.5">
