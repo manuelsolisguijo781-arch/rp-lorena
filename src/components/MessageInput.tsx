@@ -9,6 +9,14 @@ interface MessageInputProps {
   onOpenDiceModal: () => void;
 }
 
+const VOICE_PRESETS = [
+  { slash: '/', name: 'Rosa', dot: 'bg-pink-400', text: 'text-pink-300' },
+  { slash: '//', name: 'Verde', dot: 'bg-emerald-400', text: 'text-emerald-300' },
+  { slash: '///', name: 'Celeste', dot: 'bg-sky-400', text: 'text-sky-300' },
+  { slash: '////', name: 'Morado', dot: 'bg-purple-400', text: 'text-purple-300' },
+  { slash: '/////', name: 'Ámbar', dot: 'bg-amber-400', text: 'text-amber-300' },
+];
+
 export const MessageInput: React.FC<MessageInputProps> = ({
   player,
   onSendMessage,
@@ -18,6 +26,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const [isSecret, setIsSecret] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  const [showVoiceMenu, setShowVoiceMenu] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -73,6 +82,21 @@ export const MessageInput: React.FC<MessageInputProps> = ({
   const handleToggleSecret = () => {
     SoundEffects.playChime();
     setIsSecret((prev) => !prev);
+  };
+
+  const handleInsertSlash = (slash: string) => {
+    SoundEffects.playChime();
+    setContent((prev) => {
+      const next = prev ? `${prev} ${slash} ` : `${slash} `;
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.focus();
+          textareaRef.current.setSelectionRange(next.length, next.length);
+        }
+      }, 50);
+      return next;
+    });
+    setShowVoiceMenu(false);
   };
 
   return (
@@ -143,13 +167,55 @@ export const MessageInput: React.FC<MessageInputProps> = ({
             placeholder={
               selectedImages.length > 0
                 ? `Pie de foto para ${selectedImages.length} ${selectedImages.length === 1 ? 'foto' : 'fotos'}...`
-                : `Escribe como ${player.displayName}… *acción* diálogo ||secreto|| (off-rol)`
+                : `Escribe como ${player.displayName}… *acción* /rosa //verde ///celeste (off-rol)`
             }
             className="w-full bg-transparent px-2.5 py-1 text-xs sm:text-sm text-slate-100 placeholder:text-slate-400 focus:outline-none resize-none max-h-28"
           />
 
           {/* Tool row */}
           <div className="flex items-center gap-1 pt-1 px-1 border-t border-slate-700/40">
+            {/* Character voice / colors popup toggle */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  SoundEffects.playChime();
+                  setShowVoiceMenu((prev) => !prev);
+                }}
+                className={`px-2 py-0.5 rounded text-[11px] font-mono flex items-center gap-1 transition-all border ${
+                  showVoiceMenu
+                    ? 'bg-genshin-gold/30 border-genshin-gold text-amber-200'
+                    : 'text-slate-400 hover:text-slate-200 border-slate-700/60 hover:bg-genshin-card'
+                }`}
+                title="Voces de personaje: / a /////"
+              >
+                <span className="font-bold text-genshin-gold">/</span>
+                <span className="text-[10px] hidden xs:inline font-sans">Voces</span>
+              </button>
+
+              {showVoiceMenu && (
+                <div className="absolute bottom-full left-0 mb-2 p-1.5 rounded-2xl bg-genshin-card border border-genshin-gold/50 shadow-2xl flex flex-col gap-1 min-w-[155px] animate-fadeIn z-30">
+                  <div className="text-[9px] font-serif font-bold text-genshin-gold px-2 py-0.5 border-b border-slate-700/60 uppercase">
+                    Color de Personaje:
+                  </div>
+                  {VOICE_PRESETS.map((v) => (
+                    <button
+                      key={v.slash}
+                      type="button"
+                      onClick={() => handleInsertSlash(v.slash)}
+                      className="px-2 py-1 rounded-xl text-xs flex items-center justify-between hover:bg-genshin-panel transition-all text-left"
+                    >
+                      <span className="font-mono font-bold text-slate-300 text-[11px]">{v.slash}</span>
+                      <span className={`text-[11px] flex items-center gap-1.5 font-medium ${v.text}`}>
+                        <span className={`w-2 h-2 rounded-full ${v.dot}`} />
+                        {v.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Secret Spoiler shortcut ||...|| */}
             <button
               type="button"
@@ -167,7 +233,7 @@ export const MessageInput: React.FC<MessageInputProps> = ({
                 });
               }}
               className="px-1.5 py-0.5 rounded text-[11px] font-mono text-purple-300/90 hover:text-purple-200 hover:bg-purple-900/30 border border-purple-500/30"
-              title="Insertar texto secreto difuminado ||...|+"
+              title="Insertar texto secreto difuminado ||...||"
             >
               ||secreto||
             </button>

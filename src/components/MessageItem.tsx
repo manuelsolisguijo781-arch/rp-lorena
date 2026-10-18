@@ -20,6 +20,52 @@ const EXPRESSION_LABELS: Record<Expression, { label: string; emoji: string }> = 
   serious: { label: 'Solemne', emoji: '🧐' },
 };
 
+const SLASH_COLOR_STYLES: Record<
+  number,
+  { text: string; border: string; bg: string; dot: string; label: string }
+> = {
+  1: {
+    // / Rosa
+    text: 'text-pink-300 font-medium',
+    border: 'border-l-2 border-pink-400/80 pl-2.5',
+    bg: 'bg-pink-950/20',
+    dot: 'bg-pink-400',
+    label: '/ Rosa',
+  },
+  2: {
+    // // Verde
+    text: 'text-emerald-300 font-medium',
+    border: 'border-l-2 border-emerald-400/80 pl-2.5',
+    bg: 'bg-emerald-950/20',
+    dot: 'bg-emerald-400',
+    label: '// Verde',
+  },
+  3: {
+    // /// Azul / Celeste
+    text: 'text-sky-300 font-medium',
+    border: 'border-l-2 border-sky-400/80 pl-2.5',
+    bg: 'bg-sky-950/20',
+    dot: 'bg-sky-400',
+    label: '/// Celeste',
+  },
+  4: {
+    // //// Violeta / Morado
+    text: 'text-purple-300 font-medium',
+    border: 'border-l-2 border-purple-400/80 pl-2.5',
+    bg: 'bg-purple-950/20',
+    dot: 'bg-purple-400',
+    label: '//// Morado',
+  },
+  5: {
+    // ///// Naranja / Ámbar
+    text: 'text-amber-300 font-medium',
+    border: 'border-l-2 border-amber-400/80 pl-2.5',
+    bg: 'bg-amber-950/20',
+    dot: 'bg-amber-400',
+    label: '///// Ámbar',
+  },
+};
+
 export const MessageItem: React.FC<MessageItemProps> = ({
   message,
   currentUserId,
@@ -444,12 +490,23 @@ export const MessageItem: React.FC<MessageItemProps> = ({
                       </div>
                     );
                   } else {
+                    const voice = block.slashColor ? SLASH_COLOR_STYLES[block.slashColor] : undefined;
                     return (
                       <div
                         key={idx}
-                        className="text-xs sm:text-sm text-slate-100 leading-relaxed font-sans"
+                        className={`text-xs sm:text-sm leading-relaxed font-sans ${
+                          voice
+                            ? `${voice.text} ${voice.border} ${voice.bg} py-1 my-0.5 rounded-r-xl transition-all`
+                            : 'text-slate-100'
+                        }`}
                       >
-                        {block.text}
+                        {voice && (
+                          <span
+                            className={`inline-block w-2 h-2 rounded-full mr-2 align-middle ${voice.dot} shadow-sm ring-1 ring-white/20`}
+                            title={`Personaje ${voice.label}`}
+                          />
+                        )}
+                        <span>{block.text}</span>
                       </div>
                     );
                   }
