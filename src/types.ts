@@ -1,15 +1,29 @@
 export type Expression = 'normal' | 'blush' | 'smirk' | 'surprised' | 'teasing' | 'serious';
 
+export interface CharacterProfile {
+  id: string;
+  name: string;
+  nickname?: string;
+  bio?: string;
+  avatarUrl?: string;
+  referencePhotos: string[];
+  outfit?: string;
+  condition?: string;
+  weapon?: string;
+}
+
 export interface Player {
   id: string;
   username: string;
   displayName: string;
+  nickname?: string; // Apodo personal
   avatarUrl: string;
   bio: string;
   outfit?: string; // Atuendo / Ropa actual
   condition?: string; // Estado actual (Normal, Atada, Excitada, etc.)
   weapon?: string; // Arma, accesorio o posesión especial
   password?: string;
+  characters?: CharacterProfile[];
   createdAt: number;
 }
 

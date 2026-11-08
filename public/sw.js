@@ -4,7 +4,7 @@
 // for SW control. Forces immediate claim and handles push events.
 // ============================================================
 
-const CACHE_NAME = 'rp-lorena-v4';
+const CACHE_NAME = 'rp-lorena-v5';
 const STATIC_ASSETS = [
   '/rp-lorena/',
   '/rp-lorena/index.html',

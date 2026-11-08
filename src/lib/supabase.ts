@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Room, Player, Message, DiceRoll, Expression, ChallengeData } from '../types';
+import { Room, Player, Message, DiceRoll, Expression, ChallengeData, CharacterProfile } from '../types';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'https://prgmytgvueopakwzppge.supabase.co';
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_SLga2tSRZmZc4pgAXRQ4IQ_Qh9u7FR4';
@@ -16,22 +16,23 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 });
 
 function serializeBio(player: Partial<Player>): string {
-  if (player.outfit !== undefined || player.condition !== undefined || player.weapon !== undefined) {
-    return JSON.stringify({
-      bio: player.bio || '',
-      outfit: player.outfit || '',
-      condition: player.condition || '',
-      weapon: player.weapon || '',
-    });
-  }
-  return player.bio || '';
+  return JSON.stringify({
+    bio: player.bio || '',
+    nickname: player.nickname || '',
+    outfit: player.outfit || '',
+    condition: player.condition || '',
+    weapon: player.weapon || '',
+    characters: player.characters || [],
+  });
 }
 
 function parseBio(rawBio: string | null | undefined): {
   bio: string;
+  nickname?: string;
   outfit?: string;
   condition?: string;
   weapon?: string;
+  characters?: CharacterProfile[];
 } {
   if (!rawBio) return { bio: '' };
   try {
@@ -40,9 +41,11 @@ function parseBio(rawBio: string | null | undefined): {
       const parsed = JSON.parse(trimmed);
       return {
         bio: parsed.bio || '',
+        nickname: parsed.nickname || undefined,
         outfit: parsed.outfit || undefined,
         condition: parsed.condition || undefined,
         weapon: parsed.weapon || undefined,
+        characters: parsed.characters || undefined,
       };
     }
   } catch {
@@ -78,11 +81,22 @@ export const dbService = {
       id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
       username: username,
       displayName: displayName || username,
+      nickname: '',
       avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
       bio: 'Explorando nuevas historias...',
       outfit: 'Ropa de viajero/a',
       condition: 'Normal',
       weapon: 'Sin arma',
+      characters: [
+        {
+          id: `char-${Date.now()}-1`,
+          name: displayName || username,
+          nickname: 'Principal',
+          bio: 'Mi personaje principal',
+          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${username}`,
+          referencePhotos: [],
+        },
+      ],
       password: password,
       createdAt: Date.now(),
     };
@@ -124,16 +138,28 @@ export const dbService = {
     }
 
     const parsed = parseBio(data.bio);
+    const resolvedName = data.display_name || data.username;
 
     return {
       id: data.id,
       username: data.username,
-      displayName: data.display_name || data.username,
+      displayName: resolvedName,
+      nickname: parsed.nickname || '',
       avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
       bio: parsed.bio,
       outfit: parsed.outfit || 'Ropa habitual',
       condition: parsed.condition || 'Normal',
       weapon: parsed.weapon || 'Ninguna',
+      characters: parsed.characters && parsed.characters.length > 0 ? parsed.characters : [
+        {
+          id: `char-${data.id}-1`,
+          name: resolvedName,
+          nickname: parsed.nickname || 'Principal',
+          bio: parsed.bio || 'Mi personaje principal',
+          avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
+          referencePhotos: [],
+        },
+      ],
       password: data.active_character_id,
       createdAt: new Date(data.updated_at || Date.now()).getTime(),
     };
@@ -149,15 +175,27 @@ export const dbService = {
     if (error || !data) return null;
 
     const parsed = parseBio(data.bio);
+    const resolvedName = data.display_name || data.username;
     return {
       id: data.id,
       username: data.username,
-      displayName: data.display_name || data.username,
+      displayName: resolvedName,
+      nickname: parsed.nickname || '',
       avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
       bio: parsed.bio,
       outfit: parsed.outfit || 'Ropa habitual',
       condition: parsed.condition || 'Normal',
       weapon: parsed.weapon || 'Ninguna',
+      characters: parsed.characters && parsed.characters.length > 0 ? parsed.characters : [
+        {
+          id: `char-${data.id}-1`,
+          name: resolvedName,
+          nickname: parsed.nickname || 'Principal',
+          bio: parsed.bio || 'Mi personaje principal',
+          avatarUrl: data.avatar_url || `https://api.dicebear.com/7.x/bottts/svg?seed=${data.username}`,
+          referencePhotos: [],
+        },
+      ],
       createdAt: new Date(data.updated_at || Date.now()).getTime(),
     };
   },

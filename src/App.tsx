@@ -464,7 +464,8 @@ export const App: React.FC = () => {
     content: string,
     expression: Expression,
     imageFiles?: File[] | File,
-    isSecret?: boolean
+    isSecret?: boolean,
+    existingUrls?: string[]
   ) => {
     if (!currentRoom || !player) return;
 
@@ -474,7 +475,7 @@ export const App: React.FC = () => {
         : [imageFiles]
       : [];
 
-    let uploadedImageUrls: string[] = [];
+    let uploadedImageUrls: string[] = existingUrls ? [...existingUrls] : [];
 
     if (filesArray.length > 0) {
       for (const file of filesArray) {
@@ -840,6 +841,7 @@ export const App: React.FC = () => {
             onSendMessage={handleSendMessage}
             onOpenDiceModal={() => setIsDiceModalOpen(true)}
             onTyping={handleTyping}
+            onOpenProfile={() => setIsProfileOpen(true)}
           />
         </>
       )}
