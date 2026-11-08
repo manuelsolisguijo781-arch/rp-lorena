@@ -19,6 +19,8 @@ import { parseMessageContent } from './utils/parser';
 import { supabase, dbService } from './lib/supabase';
 import { Sparkles, MessageSquare, Wifi, Loader2 } from 'lucide-react';
 import { notificationService } from './utils/notifications';
+import { SoundEffects } from './utils/sound';
+import confetti from 'canvas-confetti';
 
 const STORAGE_AUTH_KEY = 'rp_auth_user_v2';
 
@@ -666,13 +668,20 @@ export const App: React.FC = () => {
 
   const handleRespondToChallenge = async (messageId: string) => {
     if (!player) return;
+    SoundEffects.playDiceRattle();
     const rollVal = Math.floor(Math.random() * 20) + 1;
     let outcome: RollOutcome = 'mixed';
-    if (rollVal === 20) outcome = 'critical_success';
-    else if (rollVal === 1) outcome = 'critical_failure';
-    else if (rollVal >= 12) outcome = 'success';
-    else if (rollVal >= 8) outcome = 'mixed';
-    else outcome = 'failure';
+    if (rollVal === 20) {
+      outcome = 'critical_success';
+    } else if (rollVal === 1) {
+      outcome = 'critical_failure';
+    } else if (rollVal >= 12) {
+      outcome = 'success';
+    } else if (rollVal >= 8) {
+      outcome = 'mixed';
+    } else {
+      outcome = 'failure';
+    }
 
     const challengeResponseRoll: DiceRoll = {
       diceType: 'd20',
@@ -688,6 +697,16 @@ export const App: React.FC = () => {
       setMessages((prev) =>
         prev.map((m) => (m.id === messageId ? updatedMsg : m))
       );
+      if (updatedMsg.diceRoll?.challenge?.winnerName === player.displayName) {
+        SoundEffects.playCriticalSuccess();
+        confetti({
+          particleCount: 100,
+          spread: 80,
+          origin: { y: 0.5 },
+        });
+      } else {
+        SoundEffects.playChime();
+      }
     }
   };
 
