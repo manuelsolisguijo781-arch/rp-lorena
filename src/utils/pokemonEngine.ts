@@ -1,5 +1,5 @@
-import { PokedexEntry, PokemonInstance, BattleResult, NPCProfile } from '../types/pokemon';
-import { getFullAlolaPokedex, getAnimatedSpriteUrl, getArtworkUrl } from '../data/alolaPokedex';
+import { PokedexEntry, PokemonInstance, BattleResult } from '../types/pokemon';
+import { getFullAlolaPokedex } from '../data/alolaPokedex';
 
 const PERSONALITIES = [
   'Cariñoso y leal a su entrenador',
@@ -21,7 +21,8 @@ export const createPokemonInstance = (
   ownerName = 'Bruno',
   isStarter = false,
   isTotem = false,
-  customNickname?: string
+  customNickname?: string,
+  customPlotArmor?: boolean
 ): PokemonInstance => {
   const statVariation = () => Math.floor(Math.random() * 7) - 3;
   const hpBase = entry.baseStats.hp + level * 2 + statVariation();
@@ -29,7 +30,6 @@ export const createPokemonInstance = (
   const defBase = entry.baseStats.defense + Math.floor(level * 1.3) + statVariation();
   const spdBase = entry.baseStats.speed + Math.floor(level * 1.2) + statVariation();
 
-  // Si es Totem / Dominante, sus estadísticas se multiplican por su aura
   const multiplier = isTotem ? 1.6 : (isStarter ? 1.2 : 1.0);
 
   return {
@@ -45,6 +45,7 @@ export const createPokemonInstance = (
     defense: Math.round(defBase * multiplier),
     speed: Math.round(spdBase * multiplier),
     isStarter: isStarter || !!entry.isStarter,
+    hasPlotArmor: customPlotArmor !== undefined ? customPlotArmor : (isStarter || !!entry.isStarter),
     isTotem,
     personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
     ownerId,
@@ -145,15 +146,33 @@ export const checkAndEvolve = (pk: PokemonInstance): { evolved: boolean; pokemon
   return { evolved: false, pokemon: pk };
 };
 
-// Generar encuentro salvaje en Alola
-export const generateWildPokemon = (baseLevel = 12): PokemonInstance => {
+// Generar encuentro salvaje con coherencia evolutiva y nivel medio del equipo
+export const generateWildPokemon = (playerTeam: PokemonInstance[] = []): PokemonInstance => {
   const pokedex = getFullAlolaPokedex();
-  // Excluir formas legendarias ultra altas de la hierba común
-  const wildPool = pokedex.filter(p => !['Solgaleo', 'Lunala', 'Necrozma', 'Marshadow'].includes(p.name));
-  const chosen = wildPool[Math.floor(Math.random() * wildPool.length)];
-  const randomLevel = Math.max(3, baseLevel + Math.floor(Math.random() * 5) - 2);
 
-  return createPokemonInstance(chosen, randomLevel, 'wild', 'Salvaje', false, false);
+  // Calcular nivel medio del equipo del entrenador (mínimo 6 por defecto)
+  const avgLevel = playerTeam.length > 0
+    ? Math.round(playerTeam.reduce((acc, p) => acc + p.level, 0) / playerTeam.length)
+    : 12;
+
+  // El nivel del salvaje oscila alrededor de la media (+- 2 o 3 niveles)
+  const wildLevel = Math.max(3, avgLevel + Math.floor(Math.random() * 5) - 2);
+
+  // Filtrar criaturas válidas:
+  // 1. Excluir legendarios/guardianes de la hierba común
+  const legendaries = ['Solgaleo', 'Lunala', 'Necrozma', 'Marshadow', 'Tapu Koko', 'Tapu Lele', 'Tapu Bulu', 'Tapu Fini'];
+  
+  // 2. Coherencia Evolutiva: Solo especies cuyo minWildLevel sea menor o igual al nivel generado
+  const validPool = pokedex.filter(p => {
+    if (legendaries.includes(p.name)) return false;
+    const minReq = p.minWildLevel || 1;
+    return minReq <= wildLevel;
+  });
+
+  const finalPool = validPool.length > 0 ? validPool : pokedex.filter(p => (p.minWildLevel || 1) <= 5);
+  const chosen = finalPool[Math.floor(Math.random() * finalPool.length)];
+
+  return createPokemonInstance(chosen, wildLevel, 'wild', 'Salvaje', false, false);
 };
 
 // Lanza una Pokéball
@@ -162,7 +181,6 @@ export const attemptCatch = (
   trainerId: string,
   trainerName: string
 ): { success: boolean; pokemon?: PokemonInstance; narrative: string } => {
-  // Probabilidad base 60%, reducida un poco por nivel
   const catchChance = Math.max(25, 75 - wild.level * 1.5);
   const roll = Math.random() * 100;
 
@@ -176,7 +194,7 @@ export const attemptCatch = (
     return {
       success: true,
       pokemon: caught,
-      narrative: `¡La Pokéball rodó una... dos... tres veces y emitió un destello final! ¡Has capturado con éxito a ${wild.name}!`
+      narrative: `¡La Pokéball rodó una... dos... tres veces y emitió un destello final! ¡Has capturado con éxito a ${wild.name} (Nivel ${wild.level})!`
     };
   } else {
     return {
@@ -267,7 +285,6 @@ export const simulateNarrativeBattle = (
   const chronicle: string[] = [];
   const highlights: string[] = [];
 
-  // Copia de luchadores
   const fighters1 = [...team1.pokemons];
   const fighters2 = [...team2.pokemons];
 
@@ -282,12 +299,10 @@ export const simulateNarrativeBattle = (
     };
   }
 
-  // Orden según estrategia
   let active1: PokemonInstance;
   let active2: PokemonInstance;
 
   if (strategy === 'anchor' && fighters1.length > 1) {
-    // El mejor o inicial se guarda al final
     active1 = fighters1.shift()!;
   } else {
     active1 = fighters1.shift()!;
@@ -303,13 +318,12 @@ export const simulateNarrativeBattle = (
     chronicle.push(`Bruno y Lorena avanzan hombro con hombro, sincronizando sus miradas antes de liberar a sus compañeros al unísono.`);
   }
 
-  chronicle.push(`${team1.name} confía el liderazgo a ${active1.nickname} (Nivel ${active1.level}), mientras que ${team2.name} responde enviando al frente a ${active2.nickname} (Nivel ${active2.level}).`);
+  chronicle.push(`${team1.name} confía el liderazgo a ${active1.nickname} (Nivel ${active1.level} • ${active1.maxHp} PS), mientras que ${team2.name} responde enviando al frente a ${active2.nickname} (Nivel ${active2.level} • ${active2.maxHp} PS).`);
   chronicle.push(`Ambas criaturas se miden en el centro del terreno. La tensión en la sala es absoluta.`);
 
   let hp1 = active1.maxHp;
   let hp2 = active2.maxHp;
   let revived1 = false;
-  let revived2 = false;
   let mvpCandidate = active1.nickname;
 
   // 2. NUDO Y CRUCE DE GOLPES NARRATIVOS
@@ -319,7 +333,7 @@ export const simulateNarrativeBattle = (
 
     // Cálculo de probabilidades oculto (+5% por nivel de ventaja)
     const levelDiff = active1.level - active2.level;
-    const baseAdvantage1 = 50 + (levelDiff * 5) + (active1.isStarter ? 15 : 0) - (active2.isTotem ? 20 : 0);
+    const baseAdvantage1 = 50 + (levelDiff * 5) + (active1.hasPlotArmor ? 15 : 0) - (active2.isTotem ? 20 : 0);
     const roll = Math.random() * 100;
 
     const roundMove1 = getFlavorMove(type1, round > 4 ? 'ultimate' : 'heavy');
@@ -338,12 +352,12 @@ export const simulateNarrativeBattle = (
       }
     } else {
       // Éxito de Team 2
-      hp1 -= Math.round(active2.attack * (active1.isStarter ? 0.7 : 1.1)); // Plot armor reduce daño a inicial
+      hp1 -= Math.round(active2.attack * (active1.hasPlotArmor ? 0.7 : 1.1));
       chronicle.push(`${active2.nickname} hizo valer su presencia. Con un rápido movimiento liberó un ${roundMove2} que impactó de lleno en ${active1.nickname}, levantando una densa polvareda en el campo.`);
     }
 
-    // Comprobar eventos de drama (resurrección emocional de Iniciales / Plot Armor)
-    if (hp1 <= 0 && active1.isStarter && !revived1) {
+    // Comprobar eventos de drama (resurrección emocional de Plot Armor)
+    if (hp1 <= 0 && active1.hasPlotArmor && !revived1) {
       revived1 = true;
       hp1 = Math.round(active1.maxHp * 0.45);
       
@@ -357,31 +371,29 @@ export const simulateNarrativeBattle = (
       }
 
       chronicle.push(`💥 ¡GIRO EN EL COMBATE! Cuando todo parecía perdido para ${active1.nickname}, ${reasonText}`);
-      highlights.push(`¡${active1.nickname} revivió por su vínculo emocional inquebrantable!`);
+      highlights.push(`¡${active1.nickname} revivió gracias a su Plot Armor y su vínculo emocional inquebrantable!`);
     }
 
-    // Comprobar si active2 cae
     if (hp2 <= 0) {
       chronicle.push(`El castigo acumulado fue demasiado: ${active2.nickname} se tambaleó y finalmente cayó debilitado sobre la arena.`);
       if (fighters2.length > 0) {
         active2 = fighters2.shift()!;
         hp2 = active2.maxHp;
-        chronicle.push(`Sin tiempo que perder, ${team2.name} retira a su caído y manda inmediatamente al combate a ${active2.nickname}!`);
+        chronicle.push(`Sin tiempo que perder, ${team2.name} retira a su caído y manda inmediatamente al combate a ${active2.nickname} (Nv.${active2.level})!`);
       } else {
-        break; // Team 2 derrotado
+        break;
       }
     }
 
-    // Comprobar si active1 cae (sin resurrección pendiente)
     if (hp1 <= 0) {
       chronicle.push(`${active1.nickname} no pudo continuar y cayó exhausto tras darlo todo.`);
       if (fighters1.length > 0) {
         active1 = fighters1.shift()!;
         hp1 = active1.maxHp;
         mvpCandidate = active1.nickname;
-        chronicle.push(`¡La batalla no ha terminado! ${team1.name} envía al campo a su siguiente combatiente: ¡adelante, ${active1.nickname}!`);
+        chronicle.push(`¡La batalla no ha terminado! ${team1.name} envía al campo a su siguiente combatiente: ¡adelante, ${active1.nickname} (Nv.${active1.level})!`);
       } else {
-        break; // Team 1 derrotado
+        break;
       }
     }
   }

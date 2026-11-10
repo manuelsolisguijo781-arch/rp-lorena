@@ -11,6 +11,7 @@ export interface PokedexEntry {
   };
   spriteKey: string; // clave para sprite 3D animado en Showdown
   isStarter?: boolean;
+  minWildLevel?: number; // Nivel mínimo lógico para aparecer salvaje (coherencia evolutiva)
   evolvesTo?: {
     targetId: number;
     level?: number;
@@ -31,6 +32,7 @@ export interface PokemonInstance {
   defense: number;
   speed: number;
   isStarter: boolean;
+  hasPlotArmor: boolean; // Controlable manualmente por el usuario
   isTotem: boolean;
   personality: string;
   ownerId: string;
@@ -46,6 +48,17 @@ export interface PokemonInstance {
   spriteKey: string;
   signatureMove?: string;
   caughtAt: number;
+}
+
+export interface TrainerProfile {
+  id: string;
+  name: string;
+  title: string;
+  role: 'jugador' | 'npc' | 'totem';
+  avatarUrl: string;
+  bio: string;
+  activePokemonId?: string;
+  team: PokemonInstance[];
 }
 
 export interface NPCProfile {

@@ -1,4 +1,4 @@
-import { PokemonInstance, NPCProfile } from '../types/pokemon';
+import { PokemonInstance, NPCProfile, TrainerProfile } from '../types/pokemon';
 import { ALOLA_POKEDEX } from './alolaPokedex';
 import { createPokemonInstance } from '../utils/pokemonEngine';
 
@@ -11,15 +11,15 @@ const getInitialPokemonForTrainer = (ownerId: string, ownerName: string): Pokemo
     const rowletEntry = ALOLA_POKEDEX.find(p => p.name === 'Rowlet') || ALOLA_POKEDEX[0];
     const pikaEntry = ALOLA_POKEDEX.find(p => p.name === 'Pikachu') || ALOLA_POKEDEX[1];
     return [
-      createPokemonInstance(rowletEntry, 14, 'bruno', 'Bruno', true, false, 'Rowlet'),
-      createPokemonInstance(pikaEntry, 15, 'bruno', 'Bruno', true, false, 'Pikachu')
+      createPokemonInstance(rowletEntry, 14, 'bruno', 'Bruno', true, false, 'Rowlet', true),
+      createPokemonInstance(pikaEntry, 15, 'bruno', 'Bruno', true, false, 'Pikachu', true)
     ];
   } else {
     const littenEntry = ALOLA_POKEDEX.find(p => p.name === 'Litten') || ALOLA_POKEDEX[3];
     const vulpixEntry = ALOLA_POKEDEX.find(p => p.name === 'Vulpix de Alola') || ALOLA_POKEDEX[7];
     return [
-      createPokemonInstance(littenEntry, 14, 'lorena', 'Lorena', true, false, 'Litten'),
-      createPokemonInstance(vulpixEntry, 15, 'lorena', 'Lorena', true, false, 'Vulpix Nieve')
+      createPokemonInstance(littenEntry, 14, 'lorena', 'Lorena', true, false, 'Litten', true),
+      createPokemonInstance(vulpixEntry, 15, 'lorena', 'Lorena', true, false, 'Vulpix Nieve', false)
     ];
   }
 };
@@ -27,7 +27,6 @@ const getInitialPokemonForTrainer = (ownerId: string, ownerName: string): Pokemo
 const getInitialNPCs = (): NPCProfile[] => {
   const gumshoos = ALOLA_POKEDEX.find(p => p.name === 'Gumshoos') || ALOLA_POKEDEX[13];
   const lurantis = ALOLA_POKEDEX.find(p => p.name === 'Lurantis') || ALOLA_POKEDEX[30];
-  const kommoo = ALOLA_POKEDEX.find(p => p.name === 'Kommo-o') || ALOLA_POKEDEX[40];
 
   return [
     {
@@ -122,5 +121,31 @@ export const pokemonStorage = {
     } catch (e) {
       console.error('Error saving NPCs', e);
     }
+  },
+
+  getPlaceholderTrainers: (): TrainerProfile[] => {
+    const brunoTeam = pokemonStorage.getTrainerPokemon('bruno', 'Bruno');
+    const lorenaTeam = pokemonStorage.getTrainerPokemon('lorena', 'Lorena');
+
+    return [
+      {
+        id: 'bruno',
+        name: 'Bruno',
+        title: 'Entrenador de Alola • Retador del Recorrido Insular',
+        role: 'jugador',
+        avatarUrl: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80',
+        bio: 'Determinado y aventurero. Explora las islas de Alola en busca de desafiar a los Kahunas y proteger a sus compañeros.',
+        team: brunoTeam
+      },
+      {
+        id: 'lorena',
+        name: 'Lorena',
+        title: 'Entrenadora de Alola • Especialista en Vínculos',
+        role: 'jugador',
+        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+        bio: 'Estratega innata y protectora. Forja lazos profundos con criaturas de Alola combinando elegancia y poder.',
+        team: lorenaTeam
+      }
+    ];
   }
 };
