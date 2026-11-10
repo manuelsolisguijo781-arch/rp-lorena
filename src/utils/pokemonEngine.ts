@@ -1,0 +1,416 @@
+import { PokedexEntry, PokemonInstance, BattleResult, NPCProfile } from '../types/pokemon';
+import { getFullAlolaPokedex, getAnimatedSpriteUrl, getArtworkUrl } from '../data/alolaPokedex';
+
+const PERSONALITIES = [
+  'Cariñoso y leal a su entrenador',
+  'Orgulloso, no tolera que lo subestimen',
+  'Feroz e indomable en combate',
+  'Tímido, pero protector con los suyos',
+  'Travieso y lleno de adrenalina',
+  'Sereno, calculador y disciplinado',
+  'Glotón pero con un corazón gigante',
+  'Temperamental y fácil de hacer enojar',
+  'Noble, lucha con un sentido estricto del honor'
+];
+
+// Generar una instancia única de Pokémon
+export const createPokemonInstance = (
+  entry: PokedexEntry,
+  level = 10,
+  ownerId = 'bruno',
+  ownerName = 'Bruno',
+  isStarter = false,
+  isTotem = false,
+  customNickname?: string
+): PokemonInstance => {
+  const statVariation = () => Math.floor(Math.random() * 7) - 3;
+  const hpBase = entry.baseStats.hp + level * 2 + statVariation();
+  const atkBase = entry.baseStats.attack + Math.floor(level * 1.5) + statVariation();
+  const defBase = entry.baseStats.defense + Math.floor(level * 1.3) + statVariation();
+  const spdBase = entry.baseStats.speed + Math.floor(level * 1.2) + statVariation();
+
+  // Si es Totem / Dominante, sus estadísticas se multiplican por su aura
+  const multiplier = isTotem ? 1.6 : (isStarter ? 1.2 : 1.0);
+
+  return {
+    id: `pk_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    dexId: entry.id,
+    name: entry.name,
+    nickname: customNickname || entry.name,
+    types: entry.types,
+    level,
+    currentHp: Math.round(hpBase * multiplier),
+    maxHp: Math.round(hpBase * multiplier),
+    attack: Math.round(atkBase * multiplier),
+    defense: Math.round(defBase * multiplier),
+    speed: Math.round(spdBase * multiplier),
+    isStarter: isStarter || !!entry.isStarter,
+    isTotem,
+    personality: PERSONALITIES[Math.floor(Math.random() * PERSONALITIES.length)],
+    ownerId,
+    ownerName,
+    affection: {
+      love: isStarter ? 80 : 35 + Math.floor(Math.random() * 20),
+      respect: isStarter ? 75 : 40 + Math.floor(Math.random() * 20),
+      anger: Math.floor(Math.random() * 15)
+    },
+    hunger: 40,
+    hazañas: isStarter ? ['Comenzó su viaje como compañero inicial de Alola'] : [],
+    spriteKey: entry.spriteKey,
+    caughtAt: Date.now()
+  };
+};
+
+// Acciones de cuidado
+export const feedPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; narrative: string } => {
+  const updated = { ...pk };
+  updated.hunger = Math.max(0, updated.hunger - 40);
+  updated.affection.love = Math.min(100, updated.affection.love + 8);
+  updated.affection.respect = Math.min(100, updated.affection.respect + 3);
+  updated.affection.anger = Math.max(0, updated.affection.anger - 5);
+
+  const narrative = `${updated.nickname} comió con gran entusiasmo su comida favorita. Su afecto hacia ti ha aumentado notablemente.`;
+  return { pokemon: updated, narrative };
+};
+
+export const petPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; narrative: string } => {
+  const updated = { ...pk };
+  updated.affection.love = Math.min(100, updated.affection.love + 5);
+  updated.affection.anger = Math.max(0, updated.affection.anger - 6);
+
+  let narrative = '';
+  if (updated.personality.includes('Cariñoso') || updated.affection.love > 70) {
+    narrative = `${updated.nickname} emitió un dulce sonido de satisfacción y frotó su cabeza con cariño contra tu mano.`;
+  } else if (updated.personality.includes('Orgulloso') || updated.affection.anger > 40) {
+    narrative = `${updated.nickname} fingió indiferencia al principio, pero relajó sus hombros y aceptó tus caricias con respeto.`;
+  } else {
+    narrative = `Acariciaste a ${updated.nickname}. Pareció sentirse más tranquilo y en confianza a tu lado.`;
+  }
+
+  return { pokemon: updated, narrative };
+};
+
+export const trainPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; narrative: string } => {
+  const updated = { ...pk };
+  updated.level += 1;
+  updated.maxHp += 4;
+  updated.currentHp = updated.maxHp;
+  updated.attack += 3;
+  updated.defense += 2;
+  updated.speed += 2;
+  updated.affection.respect = Math.min(100, updated.affection.respect + 7);
+  updated.hunger = Math.min(100, updated.hunger + 25);
+
+  const narrative = `¡Entrenamiento completado! ${updated.nickname} subió al Nivel ${updated.level}. Ha mejorado su poder y disciplina marcial.`;
+  return { pokemon: updated, narrative };
+};
+
+// Comprobar evolución
+export const checkAndEvolve = (pk: PokemonInstance): { evolved: boolean; pokemon: PokemonInstance; message?: string } => {
+  const pokedex = getFullAlolaPokedex();
+  const entry = pokedex.find(p => p.id === pk.dexId);
+  if (!entry || !entry.evolvesTo) return { evolved: false, pokemon: pk };
+
+  const target = pokedex.find(p => p.id === entry.evolvesTo!.targetId);
+  if (!target) return { evolved: false, pokemon: pk };
+
+  const levelReq = entry.evolvesTo.level || 0;
+  const affectionReq = entry.evolvesTo.affection || 0;
+
+  const canEvolve = (pk.level >= levelReq) && (pk.affection.love >= affectionReq);
+
+  if (canEvolve) {
+    const updated: PokemonInstance = {
+      ...pk,
+      dexId: target.id,
+      name: target.name,
+      nickname: pk.nickname === entry.name ? target.name : pk.nickname,
+      types: target.types,
+      spriteKey: target.spriteKey,
+      maxHp: pk.maxHp + 25,
+      currentHp: pk.maxHp + 25,
+      attack: pk.attack + 18,
+      defense: pk.defense + 15,
+      speed: pk.speed + 12,
+      hazañas: [...pk.hazañas, `Evolucionó a ${target.name} tras un entrenamiento riguroso`]
+    };
+
+    return {
+      evolved: true,
+      pokemon: updated,
+      message: `¡Increíble momento! Rodeado de un resplandor cegador, ${pk.nickname} ha evolucionado a ${target.name}!`
+    };
+  }
+
+  return { evolved: false, pokemon: pk };
+};
+
+// Generar encuentro salvaje en Alola
+export const generateWildPokemon = (baseLevel = 12): PokemonInstance => {
+  const pokedex = getFullAlolaPokedex();
+  // Excluir formas legendarias ultra altas de la hierba común
+  const wildPool = pokedex.filter(p => !['Solgaleo', 'Lunala', 'Necrozma', 'Marshadow'].includes(p.name));
+  const chosen = wildPool[Math.floor(Math.random() * wildPool.length)];
+  const randomLevel = Math.max(3, baseLevel + Math.floor(Math.random() * 5) - 2);
+
+  return createPokemonInstance(chosen, randomLevel, 'wild', 'Salvaje', false, false);
+};
+
+// Lanza una Pokéball
+export const attemptCatch = (
+  wild: PokemonInstance,
+  trainerId: string,
+  trainerName: string
+): { success: boolean; pokemon?: PokemonInstance; narrative: string } => {
+  // Probabilidad base 60%, reducida un poco por nivel
+  const catchChance = Math.max(25, 75 - wild.level * 1.5);
+  const roll = Math.random() * 100;
+
+  if (roll <= catchChance) {
+    const caught = {
+      ...wild,
+      ownerId: trainerId,
+      ownerName: trainerName,
+      hazañas: [`Capturado en la hierba salvaje de Alola por ${trainerName}`]
+    };
+    return {
+      success: true,
+      pokemon: caught,
+      narrative: `¡La Pokéball rodó una... dos... tres veces y emitió un destello final! ¡Has capturado con éxito a ${wild.name}!`
+    };
+  } else {
+    return {
+      success: false,
+      narrative: `¡La Pokéball vibró intensamente pero ${wild.name} rompió el sello de energía y escapó velozmente entre la vegetación de Alola!`
+    };
+  }
+};
+
+// Nombres temáticos de habilidades por tipo elemental
+const TYPE_MOVES: Record<string, { fast: string[]; heavy: string[]; ultimate: string[]; effect: string }> = {
+  Planta: {
+    fast: ['Látigo Cepa certero', 'Hoja Afilada cortante'],
+    heavy: ['Bomba Germen expansiva', 'Mazazo demoledor'],
+    ultimate: ['Rayo Solar cargado con la luz de Alola'],
+    effect: 'envolvió el campo con lianas espinosas'
+  },
+  Fuego: {
+    fast: ['Ascuas incandescentes', 'Nitrocarga a toda velocidad'],
+    heavy: ['Lanzallamas abrasador', 'Rueda Fuego voraz'],
+    ultimate: ['Llamarada destructiva con forma de kanji'],
+    effect: 'elevó la temperatura hasta hacer arder el aire'
+  },
+  Agua: {
+    fast: ['Pistola Agua de precisión', 'Aqua Jet propulsado'],
+    heavy: ['Hidropulso aturdidor', 'Cascada implacable'],
+    ultimate: ['Hidrobomba torrencial que barrió la arena'],
+    effect: 'cubrió el suelo de una densa capa marina'
+  },
+  Eléctrico: {
+    fast: ['Impactrueno veloz', 'Chispazo zigzag'],
+    heavy: ['Rayo de alto voltaje', 'Chispas envolventes'],
+    ultimate: ['Trueno atronador caído directamente de los cielos'],
+    effect: 'cargó la atmósfera con estática ensordecedora'
+  },
+  Fantasma: {
+    fast: ['Tinieblas etéreas', 'Sombra Vil traicionera'],
+    heavy: ['Bola Sombra tenebrosa', 'Garra Umbría'],
+    ultimate: ['Fuerza Espectral que desgarró la realidad'],
+    effect: 'hizo descender la temperatura a un frío espectral'
+  },
+  Hada: {
+    fast: ['Viento Feérico deslumbrante', 'Voz Cautivadora'],
+    heavy: ['Brillo Mágico cegador', 'Beso Drenaje'],
+    ultimate: ['Fuerza Lunar cargada de magia pura'],
+    effect: 'llenó la sala con destellos prismáticos'
+  },
+  Roca: {
+    fast: ['Lanza Rocas afilado', 'Pedrada continua'],
+    heavy: ['Avalancha violenta', 'Roca Afilada'],
+    ultimate: ['Rocazo descomunal que agrietó el suelo'],
+    effect: 'hizo temblar la tierra con estruendo'
+  },
+  Lucha: {
+    fast: ['Golpe Kárate seco', 'Ultrapuño repentino'],
+    heavy: ['A Bocajarro sin piedad', 'Sumisión de hierro'],
+    ultimate: ['Fuerza Bruta que hizo resonar las paredes'],
+    effect: 'dejó escapar una onda de choque física demoledora'
+  },
+  Dragón: {
+    fast: ['Garra Dragón implacable', 'Dragoaliento abrasador'],
+    heavy: ['Carga Dragón arrolladora', 'Pulso Dragón'],
+    ultimate: ['Cometa Draco desatando una lluvia de meteoros'],
+    effect: 'hizo rugir a los ancestros con un aura colosal'
+  },
+  Normal: {
+    fast: ['Ataque Rápido fulgurante', 'Placaje directo'],
+    heavy: ['Golpe Cabeza rotundo', 'Doble Filo arriesgado'],
+    ultimate: ['Hiperrayo de energía pura y destructiva'],
+    effect: 'creó un impacto sordo que levantó una nube de humo'
+  }
+};
+
+const getFlavorMove = (type: string, power: 'fast' | 'heavy' | 'ultimate') => {
+  const table = TYPE_MOVES[type] || TYPE_MOVES['Normal'];
+  const list = table[power];
+  return list[Math.floor(Math.random() * list.length)];
+};
+
+// =========================================================================
+// MOTOR NARRATIVO DE COMBATE
+// =========================================================================
+export const simulateNarrativeBattle = (
+  team1: { name: string; pokemons: PokemonInstance[]; isCoop?: boolean },
+  team2: { name: string; pokemons: PokemonInstance[]; isTotemBoss?: boolean },
+  strategy: 'lead' | 'anchor' = 'lead'
+): BattleResult => {
+  const chronicle: string[] = [];
+  const highlights: string[] = [];
+
+  // Copia de luchadores
+  const fighters1 = [...team1.pokemons];
+  const fighters2 = [...team2.pokemons];
+
+  if (fighters1.length === 0 || fighters2.length === 0) {
+    return {
+      title: 'Combate Cancelado',
+      winnerTeam: 'team1',
+      winnerNames: team1.name,
+      chronicleLines: ['No había suficientes contendientes listos para la batalla.'],
+      mvpPokemon: 'Ninguno',
+      generatedAt: Date.now()
+    };
+  }
+
+  // Orden según estrategia
+  let active1: PokemonInstance;
+  let active2: PokemonInstance;
+
+  if (strategy === 'anchor' && fighters1.length > 1) {
+    // El mejor o inicial se guarda al final
+    active1 = fighters1.shift()!;
+  } else {
+    active1 = fighters1.shift()!;
+  }
+  active2 = fighters2.shift()!;
+
+  // 1. APERTURA
+  chronicle.push(`⚡ ¡El desafío ha comenzado en la arena de Alola!`);
+  if (team2.isTotemBoss) {
+    chronicle.push(`Un rugido atronador sacude el suelo. ${team2.name} desciende imbuido de un aura dorada cegadora: ¡un Pokémon Dominante de proporciones descomunales!`);
+  }
+  if (team1.isCoop) {
+    chronicle.push(`Bruno y Lorena avanzan hombro con hombro, sincronizando sus miradas antes de liberar a sus compañeros al unísono.`);
+  }
+
+  chronicle.push(`${team1.name} confía el liderazgo a ${active1.nickname} (Nivel ${active1.level}), mientras que ${team2.name} responde enviando al frente a ${active2.nickname} (Nivel ${active2.level}).`);
+  chronicle.push(`Ambas criaturas se miden en el centro del terreno. La tensión en la sala es absoluta.`);
+
+  let hp1 = active1.maxHp;
+  let hp2 = active2.maxHp;
+  let revived1 = false;
+  let revived2 = false;
+  let mvpCandidate = active1.nickname;
+
+  // 2. NUDO Y CRUCE DE GOLPES NARRATIVOS
+  for (let round = 1; round <= 7; round++) {
+    const type1 = active1.types[0] || 'Normal';
+    const type2 = active2.types[0] || 'Normal';
+
+    // Cálculo de probabilidades oculto (+5% por nivel de ventaja)
+    const levelDiff = active1.level - active2.level;
+    const baseAdvantage1 = 50 + (levelDiff * 5) + (active1.isStarter ? 15 : 0) - (active2.isTotem ? 20 : 0);
+    const roll = Math.random() * 100;
+
+    const roundMove1 = getFlavorMove(type1, round > 4 ? 'ultimate' : 'heavy');
+    const roundMove2 = getFlavorMove(type2, round > 4 ? 'ultimate' : 'heavy');
+
+    if (roll < baseAdvantage1) {
+      // Éxito de Team 1
+      const isCritical = Math.random() > 0.6;
+      hp2 -= Math.round(active1.attack * (isCritical ? 1.4 : 1.0));
+
+      if (isCritical) {
+        chronicle.push(`¡Impacto crítico! ${active1.nickname} aprovechó un descuido rival para desatar un ${roundMove1}. El golpe estremeció la guardia de ${active2.nickname}, haciéndolo retroceder varios metros entre jadeos.`);
+        highlights.push(`${active1.nickname} conectó un golpe crítico rotundo.`);
+      } else {
+        chronicle.push(`${active1.nickname} tomó la delantera ejecutando un ${roundMove1}. En respuesta, ${active2.nickname} intentó contraatacar con ${roundMove2}, pero no logró conectar con suficiente fuerza.`);
+      }
+    } else {
+      // Éxito de Team 2
+      hp1 -= Math.round(active2.attack * (active1.isStarter ? 0.7 : 1.1)); // Plot armor reduce daño a inicial
+      chronicle.push(`${active2.nickname} hizo valer su presencia. Con un rápido movimiento liberó un ${roundMove2} que impactó de lleno en ${active1.nickname}, levantando una densa polvareda en el campo.`);
+    }
+
+    // Comprobar eventos de drama (resurrección emocional de Iniciales / Plot Armor)
+    if (hp1 <= 0 && active1.isStarter && !revived1) {
+      revived1 = true;
+      hp1 = Math.round(active1.maxHp * 0.45);
+      
+      let reasonText = '';
+      if (active1.affection.love >= 65) {
+        reasonText = `al escuchar la voz decidida de ${active1.ownerName}, un lazo invisible de amor y devoción encendió una llama interior en su pecho. Negándose a permitir que su entrenador cayera derrotado, ${active1.nickname} rugió con lágrimas en los ojos y se levantó rodeado de un aura indomable!`;
+      } else if (active1.affection.anger >= 40) {
+        reasonText = `un estallido de orgullo salvaje y furia pura recorrió su columna. ¡Con los ojos inyectados en rabia y despreciando la idea de arrodillarse, ${active1.nickname} desafió las leyes del combate y se mantuvo en pie por pura fuerza de voluntad!`;
+      } else {
+        reasonText = `un destello de respeto hacia ${active1.ownerName} le impidió rendirse, recuperando el aliento en el último segundo.`;
+      }
+
+      chronicle.push(`💥 ¡GIRO EN EL COMBATE! Cuando todo parecía perdido para ${active1.nickname}, ${reasonText}`);
+      highlights.push(`¡${active1.nickname} revivió por su vínculo emocional inquebrantable!`);
+    }
+
+    // Comprobar si active2 cae
+    if (hp2 <= 0) {
+      chronicle.push(`El castigo acumulado fue demasiado: ${active2.nickname} se tambaleó y finalmente cayó debilitado sobre la arena.`);
+      if (fighters2.length > 0) {
+        active2 = fighters2.shift()!;
+        hp2 = active2.maxHp;
+        chronicle.push(`Sin tiempo que perder, ${team2.name} retira a su caído y manda inmediatamente al combate a ${active2.nickname}!`);
+      } else {
+        break; // Team 2 derrotado
+      }
+    }
+
+    // Comprobar si active1 cae (sin resurrección pendiente)
+    if (hp1 <= 0) {
+      chronicle.push(`${active1.nickname} no pudo continuar y cayó exhausto tras darlo todo.`);
+      if (fighters1.length > 0) {
+        active1 = fighters1.shift()!;
+        hp1 = active1.maxHp;
+        mvpCandidate = active1.nickname;
+        chronicle.push(`¡La batalla no ha terminado! ${team1.name} envía al campo a su siguiente combatiente: ¡adelante, ${active1.nickname}!`);
+      } else {
+        break; // Team 1 derrotado
+      }
+    }
+  }
+
+  // 3. CLÍMAX Y DESENLACE
+  const team1Won = hp2 <= 0 || hp1 > hp2;
+  const winnerTeam = team1Won ? 'team1' : 'team2';
+  const winnerNames = team1Won ? team1.name : team2.name;
+
+  chronicle.push(`\n🏁 EL DESENLACE:`);
+  if (team1Won) {
+    const finalMove = getFlavorMove(active1.types[0] || 'Normal', 'ultimate');
+    chronicle.push(`En el instante decisivo, ${active1.nickname} concentró hasta la última gota de su energía vital en un ${finalMove}. El ataque selló la arena con una detonación ensordecedora, dejando fuera de combate a su adversario.`);
+    chronicle.push(`🏆 ¡${team1.name} se alza con una victoria indiscutible y épica!`);
+    mvpCandidate = active1.nickname;
+  } else {
+    const finalMove = getFlavorMove(active2.types[0] || 'Normal', 'ultimate');
+    chronicle.push(`Con un último despliegue de poder, ${active2.nickname} desató un ${finalMove} que superó toda resistencia defensiva.`);
+    chronicle.push(`🏆 ¡${team2.name} resiste el asedio y se corona como vencedor del encuentro!`);
+    mvpCandidate = active2.nickname;
+  }
+
+  return {
+    title: `Crónica de Batalla: ${team1.name} vs ${team2.name}`,
+    winnerTeam,
+    winnerNames,
+    chronicleLines: chronicle,
+    mvpPokemon: mvpCandidate,
+    dramaticMoment: highlights[0] || 'El intercambio final de habilidades desató el clímax de la arena.',
+    generatedAt: Date.now()
+  };
+};

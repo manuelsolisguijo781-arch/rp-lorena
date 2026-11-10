@@ -14,6 +14,7 @@ import { ContextModal } from './components/ContextModal';
 import { NotificationModal } from './components/NotificationModal';
 import { GalleryModal } from './components/GalleryModal';
 import { CharacterSheetModal } from './components/CharacterSheetModal';
+import { PokemonModal } from './components/pokemon/PokemonModal';
 import { Room, Player, Message, Expression, DiceRoll, RollOutcome } from './types';
 import { parseMessageContent } from './utils/parser';
 import { supabase, dbService } from './lib/supabase';
@@ -45,6 +46,7 @@ export const App: React.FC = () => {
   const [isCloudConnected, setIsCloudConnected] = useState(false);
   const [isRoomDrawerOpen, setIsRoomDrawerOpen] = useState(false);
   const [isDiceModalOpen, setIsDiceModalOpen] = useState(false);
+  const [isPokemonModalOpen, setIsPokemonModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
@@ -751,6 +753,7 @@ export const App: React.FC = () => {
         onOpenContext={() => setIsContextOpen(true)}
         onOpenNotifications={() => setIsNotificationModalOpen(true)}
         onOpenGallery={() => setIsGalleryOpen(true)}
+        onOpenPokemon={() => setIsPokemonModalOpen(true)}
       />
 
       {/* Cloud Status Indicator Bar */}
@@ -866,6 +869,16 @@ export const App: React.FC = () => {
         player={player}
         onSendRoll={handleSendDiceRoll}
       />
+
+      {/* Pokémon Alola Companion & Battle Modal */}
+      {player && (
+        <PokemonModal
+          isOpen={isPokemonModalOpen}
+          onClose={() => setIsPokemonModalOpen(false)}
+          player={player}
+          onPublishToChat={(text) => handleSendMessage(text, 'normal')}
+        />
+      )}
 
       {/* Fullscreen Photo Lightbox */}
       <PhotoModal

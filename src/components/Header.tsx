@@ -18,6 +18,7 @@ interface HeaderProps {
   onOpenContext: () => void;
   onOpenNotifications: () => void;
   onOpenGallery: () => void;
+  onOpenPokemon?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -34,6 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenContext,
   onOpenNotifications,
   onOpenGallery,
+  onOpenPokemon,
 }) => {
   const [isAudioPlaying, setIsAudioPlaying] = useState(ambientPlayer.getStatus());
   const [prefs, setPrefs] = useState(notificationService.getPreferences());
@@ -51,6 +53,11 @@ export const Header: React.FC<HeaderProps> = ({
   const handleOpenDice = () => {
     SoundEffects.playChime();
     onOpenDiceModal();
+  };
+
+  const handleOpenPokemon = () => {
+    SoundEffects.playChime();
+    if (onOpenPokemon) onOpenPokemon();
   };
 
   const handleBellClick = () => {
@@ -202,6 +209,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Dices className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-genshin-gold animate-pulse" />
             <span className="hidden md:inline">Dado</span>
+          </button>
+        )}
+
+        {/* Pokémon Companion quick button */}
+        {onOpenPokemon && (
+          <button
+            onClick={handleOpenPokemon}
+            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-xl bg-gradient-to-r from-rose-600/40 to-amber-600/40 hover:from-rose-600/60 hover:to-amber-600/60 active:scale-95 border border-amber-400/60 text-amber-200 font-serif text-xs font-bold flex items-center gap-1 shadow-genshin-gold transition-all"
+            title="Compañeros Pokémon (Alola)"
+          >
+            <span className="text-xs sm:text-sm">⚡</span>
+            <span className="hidden md:inline">Alola</span>
           </button>
         )}
 
