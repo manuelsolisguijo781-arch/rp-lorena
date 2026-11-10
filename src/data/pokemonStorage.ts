@@ -153,6 +153,20 @@ export const pokemonStorage = {
     }
   },
 
+  addNPC: (npc: NPCProfile) => {
+    const npcs = pokemonStorage.getNPCs();
+    npcs.push(npc);
+    pokemonStorage.saveNPCs(npcs);
+    return npcs;
+  },
+
+  deleteNPC: (npcId: string) => {
+    const npcs = pokemonStorage.getNPCs();
+    const filtered = npcs.filter(n => n.id !== npcId);
+    pokemonStorage.saveNPCs(filtered);
+    return filtered;
+  },
+
   updateNPCPokemon: (npcId: string, updatedTeam: PokemonInstance[]) => {
     const npcs = pokemonStorage.getNPCs();
     const target = npcs.find(n => n.id === npcId);

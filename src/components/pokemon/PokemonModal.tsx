@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, Heart, Shield, Flame, Sparkles, Swords, Compass, Award, 
   Utensils, Zap, Users, Share2, Crown, Sliders, Trash2, Plus, 
-  AlertTriangle, Frown, Smile, Wind, HelpCircle 
+  Frown, Smile, Wind, UserPlus, Image as ImageIcon 
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Player } from '../../types';
@@ -49,7 +49,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   // Arena de combate
   const [npcs, setNpcs] = useState<NPCProfile[]>([]);
-  const [rivalType, setRivalType] = useState<'rival_human' | 'miu_iruma' | 'npc' | 'coop'>('rival_human');
+  const [rivalType, setRivalType] = useState<'rival_human' | 'npc' | 'coop'>('rival_human');
   const [selectedNpcId, setSelectedNpcId] = useState<string>('');
   const [strategy, setStrategy] = useState<'lead' | 'anchor'>('lead');
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
@@ -57,6 +57,17 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   // Personajes / Placeholder
   const [placeholderTrainers, setPlaceholderTrainers] = useState<TrainerProfile[]>([]);
+
+  // Modo Creador Manual de Personajes (como Miu)
+  const [isCreatingNPC, setIsCreatingNPC] = useState(false);
+  const [newNPCName, setNewNPCName] = useState('');
+  const [newNPCTitle, setNewNPCTitle] = useState('');
+  const [newNPCAvatar, setNewNPCAvatar] = useState('');
+  const [newNPCBio, setNewNPCBio] = useState('');
+  const [newNPCPkDexId, setNewNPCPkDexId] = useState<number>(7); // Popplio por defecto
+  const [newNPCPkLevel, setNewNPCPkLevel] = useState<number>(5);
+  const [newNPCPkNickname, setNewNPCPkNickname] = useState('');
+  const [newNPCPkPersonality, setNewNPCPkPersonality] = useState<PersonalityType>('Valeroso (prioriza el respeto y honor)');
 
   // Modo Master / Admin
   const [adminTarget, setAdminTarget] = useState<string>('bruno');
@@ -179,9 +190,48 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     }, 1000);
   };
 
-  // Datos de los dos equipos de la Arena para mostrar stats y vida
+  // Creador manual de personaje / NPC
+  const handleCreateNPC = () => {
+    if (!newNPCName.trim()) return;
+    const pokedex = getFullAlolaPokedex();
+    const entry = pokedex.find(p => p.id === Number(newNPCPkDexId)) || pokedex[0];
+    const npcId = `npc_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    
+    const initialPk = createPokemonInstance(
+      entry,
+      Number(newNPCPkLevel),
+      npcId,
+      newNPCName.trim(),
+      true,
+      false,
+      newNPCPkNickname.trim() || entry.name,
+      true,
+      newNPCPkPersonality
+    );
+
+    const newNPC: NPCProfile = {
+      id: npcId,
+      name: newNPCName.trim(),
+      title: newNPCTitle.trim() || 'Entrenador/a de Alola',
+      avatarUrl: newNPCAvatar.trim() || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      team: [initialPk]
+    };
+
+    pokemonStorage.addNPC(newNPC);
+    reloadData();
+    setIsCreatingNPC(false);
+    setNewNPCName('');
+    setNewNPCTitle('');
+    setNewNPCAvatar('');
+    setNewNPCBio('');
+    setNewNPCPkNickname('');
+    try {
+      confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+    } catch (e) {}
+  };
+
+  // Datos de los dos equipos de la Arena
   const partnerTeam = pokemonStorage.getTrainerPokemon(partnerKey, partnerDisplayName);
-  const miuNPC = npcs.find(n => n.id === 'npc_miu_iruma');
 
   let currentTeam1: PokemonInstance[] = team;
   let currentTeam1Name = myDisplayName;
@@ -194,10 +244,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   let currentTeam2: PokemonInstance[] = [];
   let currentTeam2Name = '';
 
-  if (rivalType === 'miu_iruma') {
-    currentTeam2Name = 'Miu Iruma (Inventora)';
-    currentTeam2 = miuNPC ? miuNPC.team : [];
-  } else if (rivalType === 'npc') {
+  if (rivalType === 'npc') {
     const npc = npcs.find(n => n.id === selectedNpcId) || npcs[0];
     currentTeam2Name = npc ? `${npc.name} (${npc.title})` : 'Jefe de Alola';
     currentTeam2 = npc ? npc.team : [];
@@ -210,7 +257,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     currentTeam2 = partnerTeam;
   }
 
-  // Iniciar combate y procesar emociones posteriores
+  // Iniciar combate
   const handleStartBattle = () => {
     if (currentTeam1.length === 0 || currentTeam2.length === 0) return;
     setIsFighting(true);
@@ -245,7 +292,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
       pokemonStorage.saveTrainerPokemon(currentKey, updatedTeam1);
       setTeam(updatedTeam1);
 
-      // Si fue contra la pareja, actualizar también sus emociones en el storage
+      // Si fue contra la pareja, actualizar también en el storage
       if (isRival) {
         const updatedPartnerTeam = applyPostBattleEmotions(
           partnerTeam,
@@ -410,10 +457,9 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
             }`}
           >
             <Users className="w-4 h-4 text-cyan-400" />
-            Personajes & Miu Iruma
+            Personajes ({placeholderTrainers.length + npcs.length})
           </button>
 
-          {/* MODO MASTER / ADMIN */}
           <button
             onClick={() => setActiveTab('admin')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ml-auto ${
@@ -543,14 +589,13 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     </div>
                   </div>
 
-                  {/* LOS 6 MEDIDORES PSICOLÓGICOS Y EMOCIONALES */}
+                  {/* 6 MEDIDORES PSICOLÓGICOS */}
                   <div className="space-y-3 bg-black/30 p-4 rounded-2xl border border-white/5">
                     <h5 className="text-xs uppercase font-semibold text-amber-300/80 tracking-wider">
                       Estado Emocional y Psicológico (Impacto en Combate)
                     </h5>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                      {/* Amor */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-pink-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -563,7 +608,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Respeto */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-blue-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -576,7 +620,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Ira */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-orange-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -589,7 +632,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Desesperación */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-purple-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -602,7 +644,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Desidia */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-slate-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -615,7 +656,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </div>
                       </div>
 
-                      {/* Motivación */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-yellow-300 font-medium">
                           <span className="flex items-center gap-1.5">
@@ -772,21 +812,20 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     className="w-full bg-black/60 border border-amber-400/40 rounded-xl px-3 py-2 text-xs text-amber-100 focus:outline-none"
                   >
                     <option value="rival_human">⚔️ Vs {partnerDisplayName}</option>
-                    <option value="miu_iruma">🔧 Vs Miu Iruma (Inventora)</option>
-                    <option value="npc">🏛️ Vs Kahuna / Jefe Totem de Alola</option>
+                    <option value="npc">🏛️ Vs Personajes & Jefes de Alola</option>
                     <option value="coop">🤝 Cooperativo ({myDisplayName} & {partnerDisplayName} vs Jefe Totem)</option>
                   </select>
                 </div>
 
                 {rivalType === 'npc' && (
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-amber-300/80">Seleccionar Jefe:</label>
+                    <label className="text-xs font-semibold text-amber-300/80">Seleccionar Rival:</label>
                     <select
                       value={selectedNpcId}
                       onChange={(e) => setSelectedNpcId(e.target.value)}
                       className="w-full bg-black/60 border border-amber-400/40 rounded-xl px-3 py-2 text-xs text-amber-100 focus:outline-none"
                     >
-                      {npcs.filter(n => n.id !== 'npc_miu_iruma').map(npc => (
+                      {npcs.map(npc => (
                         <option key={npc.id} value={npc.id}>
                           {npc.name} ({npc.title})
                         </option>
@@ -897,11 +936,11 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                   className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-amber-600 to-yellow-500 hover:from-amber-500 hover:to-yellow-400 text-black font-extrabold text-sm shadow-xl transition-all active:scale-95 disabled:opacity-50 inline-flex items-center gap-2"
                 >
                   <Swords className="w-5 h-5" />
-                  {isFighting ? 'Simulando combate épico...' : '¡Comenzar Combate Narrativo!'}
+                  {isFighting ? 'Simulando combate épico en 3 tiempos...' : '¡Comenzar Combate Narrativo!'}
                 </button>
               </div>
 
-              {/* Crónica resultante */}
+              {/* Crónica resultante con diseño cinemático */}
               {battleResult && (
                 <div className="bg-black/50 border border-amber-400/40 rounded-3xl p-5 sm:p-6 space-y-4 animate-fadeIn">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-white/10 pb-3">
@@ -925,31 +964,209 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     )}
                   </div>
 
-                  <div className="space-y-3 font-serif text-sm text-amber-100/90 leading-relaxed max-h-[400px] overflow-y-auto pr-2">
-                    {battleResult.chronicleLines.map((line, idx) => (
-                      <p key={idx} className={line.startsWith('⚡') || line.startsWith('🏁') || line.startsWith('💥') ? 'font-bold text-amber-300' : ''}>
-                        {line}
-                      </p>
-                    ))}
+                  {/* Visualización en 3 Tiempos con Carisma */}
+                  <div className="space-y-3 font-serif max-h-[460px] overflow-y-auto pr-2">
+                    {battleResult.chronicleLines.map((line, idx) => {
+                      if (line.includes('▶ [ATAQUE]:')) {
+                        const parts = line.split('\n');
+                        return (
+                          <div key={idx} className="p-3.5 rounded-2xl bg-black/40 border border-white/10 space-y-2 shadow-inner">
+                            {parts.map((p, pIdx) => {
+                              if (p.startsWith('▶ [ATAQUE]:')) {
+                                return (
+                                  <p key={pIdx} className="text-amber-300 font-semibold text-xs sm:text-sm flex items-start gap-1.5">
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-[10px] text-amber-400 font-mono uppercase tracking-wider">Ataque</span>
+                                    <span>{p.replace('▶ [ATAQUE]: ', '')}</span>
+                                  </p>
+                                );
+                              }
+                              if (p.startsWith('▶ [REACCIÓN]:')) {
+                                return (
+                                  <p key={pIdx} className="text-cyan-300 font-medium text-xs sm:text-sm flex items-start gap-1.5 pl-2">
+                                    <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-[10px] text-cyan-400 font-mono uppercase tracking-wider">Reacción</span>
+                                    <span>{p.replace('▶ [REACCIÓN]: ', '')}</span>
+                                  </p>
+                                );
+                              }
+                              if (p.startsWith('▶ [IMPACTO]:')) {
+                                return (
+                                  <p key={pIdx} className="text-rose-200 text-xs sm:text-sm flex items-start gap-1.5 pl-4 italic">
+                                    <span className="px-1.5 py-0.5 rounded bg-rose-500/20 text-[10px] text-rose-300 font-mono uppercase tracking-wider">Resultado</span>
+                                    <span>{p.replace('▶ [IMPACTO]: ', '')}</span>
+                                  </p>
+                                );
+                              }
+                              return <p key={pIdx} className="text-xs sm:text-sm text-amber-100">{p}</p>;
+                            })}
+                          </div>
+                        );
+                      }
+
+                      if (line.startsWith('«') || line.includes('«')) {
+                        return (
+                          <div key={idx} className="p-3 rounded-2xl bg-amber-500/10 border-l-4 border-amber-400 text-xs sm:text-sm text-amber-200 italic my-1 font-sans">
+                            🗣️ {line}
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <p key={idx} className={line.startsWith('⚡') || line.startsWith('🏁') || line.startsWith('💥') ? 'font-bold text-amber-300 text-sm sm:text-base pt-1' : 'text-xs sm:text-sm text-amber-100/90 leading-relaxed'}>
+                          {line}
+                        </p>
+                      );
+                    })}
                   </div>
                 </div>
               )}
             </div>
           )}
 
-          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO, LOREEENA & MIU IRUMA) ================= */}
+          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO, LOREEENA, MIU IRUMA & CREADOR) ================= */}
           {activeTab === 'trainers' && (
             <div className="space-y-6">
-              <div className="space-y-1">
-                <h3 className="text-lg font-serif font-bold text-amber-100">
-                  Entrenadores y Personajes de Alola
-                </h3>
-                <p className="text-xs text-amber-200/70">
-                  Perfiles conectados a las cuentas de la web junto a personajes especiales de Alola.
-                </p>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                <div className="space-y-1">
+                  <h3 className="text-lg font-serif font-bold text-amber-100">
+                    Entrenadores y Personajes de Alola
+                  </h3>
+                  <p className="text-xs text-amber-200/70">
+                    Cuentas vinculadas y personajes personalizados. Puedes preparar nuevos NPCs libremente.
+                  </p>
+                </div>
+
+                <button
+                  onClick={() => setIsCreatingNPC(!isCreatingNPC)}
+                  className="px-4 py-2 rounded-2xl bg-gradient-to-r from-cyan-600 to-blue-500 hover:from-cyan-500 hover:to-blue-400 text-white font-bold text-xs shadow-lg flex items-center gap-1.5 transition-all active:scale-95"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  {isCreatingNPC ? 'Cerrar Formulario' : '➕ Crear Nuevo Personaje / NPC'}
+                </button>
               </div>
 
+              {/* FORMULARIO CREADOR DE PERSONAJES (COMO MIU IRUMA) */}
+              {isCreatingNPC && (
+                <div className="bg-black/50 border border-cyan-400/40 rounded-3xl p-5 sm:p-6 space-y-4 animate-fadeIn shadow-2xl">
+                  <h4 className="font-serif font-bold text-cyan-200 text-base flex items-center gap-2">
+                    <UserPlus className="w-5 h-5 text-cyan-400" />
+                    Creador Manual de Personaje de Alola
+                  </h4>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                    <div>
+                      <label className="text-cyan-300 font-semibold block mb-1">Nombre del Personaje:</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Kokichi Oma, Gladio, Kukui..."
+                        value={newNPCName}
+                        onChange={(e) => setNewNPCName(e.target.value)}
+                        className="w-full bg-black/60 border border-cyan-400/30 rounded-xl px-3 py-2 text-amber-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-cyan-300 font-semibold block mb-1">Título / Rol:</label>
+                      <input
+                        type="text"
+                        placeholder="Ej: Líder Supremo, Rival Sombrío..."
+                        value={newNPCTitle}
+                        onChange={(e) => setNewNPCTitle(e.target.value)}
+                        className="w-full bg-black/60 border border-cyan-400/30 rounded-xl px-3 py-2 text-amber-100"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-cyan-300 font-semibold block mb-1">URL de Foto / Avatar:</label>
+                      <input
+                        type="text"
+                        placeholder="https://... o deja vacío para foto por defecto"
+                        value={newNPCAvatar}
+                        onChange={(e) => setNewNPCAvatar(e.target.value)}
+                        className="w-full bg-black/60 border border-cyan-400/30 rounded-xl px-3 py-2 text-amber-100"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Primer Pokémon del personaje */}
+                  <div className="border-t border-white/10 pt-3 space-y-3">
+                    <h5 className="text-xs font-bold text-amber-300 uppercase">
+                      Compañero Pokémon Inicial de este Personaje:
+                    </h5>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <label className="text-amber-200/80 block mb-1">Especie de Alola (303):</label>
+                        <select
+                          value={newNPCPkDexId}
+                          onChange={(e) => setNewNPCPkDexId(Number(e.target.value))}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-2 py-1.5 text-amber-100"
+                        >
+                          {getFullAlolaPokedex().map(p => (
+                            <option key={p.id} value={p.id}>
+                              #{p.id} {p.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-amber-200/80 block mb-1">Nivel Inicial:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={newNPCPkLevel}
+                          onChange={(e) => setNewNPCPkLevel(Number(e.target.value))}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100 font-mono text-center"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-amber-200/80 block mb-1">Apodo (Opcional):</label>
+                        <input
+                          type="text"
+                          placeholder="Nombre cariñoso..."
+                          value={newNPCPkNickname}
+                          onChange={(e) => setNewNPCPkNickname(e.target.value)}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-amber-200/80 block mb-1">Personalidad Afín:</label>
+                        <select
+                          value={newNPCPkPersonality}
+                          onChange={(e) => setNewNPCPkPersonality(e.target.value as PersonalityType)}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-2 py-1.5 text-amber-100"
+                        >
+                          {PERSONALITY_OPTIONS.map(p => (
+                            <option key={p} value={p}>{p}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-end gap-3 pt-2">
+                    <button
+                      onClick={() => setIsCreatingNPC(false)}
+                      className="px-4 py-2 rounded-xl bg-white/10 text-amber-200 text-xs font-semibold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      onClick={handleCreateNPC}
+                      className="px-6 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-500 hover:to-teal-400 text-white font-bold text-xs shadow-lg transition-all active:scale-95"
+                    >
+                      ✨ Guardar y Crear Personaje
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* LISTADO DE PERSONAJES: JUGADORES + NPCS (MIU Y CREADOS) */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Bruno y Loreeena */}
                 {placeholderTrainers.map(trainer => (
                   <div key={trainer.id} className="bg-black/40 border border-amber-400/30 rounded-3xl p-5 space-y-4">
                     <div className="flex items-center gap-4">
@@ -958,7 +1175,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         alt={trainer.name}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400/40 shadow-md"
                         onError={(e) => {
-                          // Fallback si la imagen tarda en cargar
                           (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
                         }}
                       />
@@ -1017,41 +1233,38 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                   </div>
                 ))}
 
-                {/* TARJETA DE MIU IRUMA */}
-                {miuNPC && (
-                  <div className="bg-black/40 border border-pink-400/40 rounded-3xl p-5 space-y-4">
+                {/* NPCs (Miu Iruma + Creados manualmente + Jefes) */}
+                {npcs.map(npc => (
+                  <div key={npc.id} className="bg-black/40 border border-cyan-400/30 rounded-3xl p-5 space-y-4">
                     <div className="flex items-center gap-4">
                       <img
-                        src={miuNPC.avatarUrl}
-                        alt={miuNPC.name}
-                        className="w-16 h-16 rounded-2xl object-cover border-2 border-pink-400/50 shadow-md"
+                        src={npc.avatarUrl}
+                        alt={npc.name}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-cyan-400/40 shadow-md"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
                         }}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
-                          <h4 className="text-base font-serif font-bold text-pink-200">
-                            {miuNPC.name}
+                          <h4 className="text-base font-serif font-bold text-cyan-200">
+                            {npc.name}
                           </h4>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
-                            NPC Especial
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                            NPC
                           </span>
                         </div>
                         <p className="text-xs text-amber-300/80 font-medium">
-                          {miuNPC.title}
-                        </p>
-                        <p className="text-[11px] text-amber-200/60 mt-1">
-                          Vulgar, excéntrica y una inventora brillante de artefactos para Pokémon. Comenzó con un Popplio mimado y temperamental.
+                          {npc.title}
                         </p>
                       </div>
                     </div>
 
                     <div className="border-t border-white/10 pt-3 space-y-2">
-                      <span className="text-xs font-semibold text-amber-300/80">Equipo de Miu Iruma:</span>
+                      <span className="text-xs font-semibold text-amber-300/80">Equipo de {npc.name}:</span>
                       <div className="grid grid-cols-1 gap-2">
-                        {miuNPC.team.map(pk => (
-                          <div key={pk.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-pink-500/20">
+                        {npc.team.map(pk => (
+                          <div key={pk.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-cyan-500/20">
                             <img
                               src={getAnimatedSpriteUrl(pk.spriteKey)}
                               alt={pk.name}
@@ -1059,14 +1272,16 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                             />
                             <div className="flex-1 min-w-0 text-left">
                               <div className="flex items-center justify-between">
-                                <p className="text-xs font-bold text-pink-200 truncate">{pk.nickname} ({pk.name})</p>
+                                <p className="text-xs font-bold text-cyan-200 truncate">{pk.nickname} ({pk.name})</p>
                                 <span className="text-[10px] font-mono text-amber-300 font-bold">Nv.{pk.level}</span>
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-amber-200/70 mt-0.5">
                                 <span>PS: {pk.maxHp}</span>
                                 <span>•</span>
-                                <span>Agua</span>
-                                <span className="text-pink-300 font-semibold">🛡️ Plot Armor</span>
+                                <span>{pk.types.join(' / ')}</span>
+                                {pk.hasPlotArmor && (
+                                  <span className="text-pink-300 font-semibold">🛡️ Plot Armor</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1074,7 +1289,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                       </div>
                     </div>
                   </div>
-                )}
+                ))}
               </div>
             </div>
           )}
@@ -1113,15 +1328,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                 >
                   Loreeena
                 </button>
-                <button
-                  onClick={() => { setAdminTarget('npc_miu_iruma'); setEditingPk(null); }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    adminTarget === 'npc_miu_iruma' ? 'bg-amber-500 text-black shadow-md' : 'bg-white/10 text-amber-200 hover:bg-white/20'
-                  }`}
-                >
-                  Miu Iruma
-                </button>
-                {npcs.filter(n => n.id !== 'npc_miu_iruma').map(npc => (
+                {npcs.map(npc => (
                   <button
                     key={npc.id}
                     onClick={() => { setAdminTarget(npc.id); setEditingPk(null); }}
@@ -1248,7 +1455,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                               speed: 14 + Math.round(lvl * 1.2)
                             });
                           }}
-                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100 font-mono"
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100 font-mono text-center"
                         />
                       </div>
                     </div>
@@ -1278,11 +1485,10 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                       </button>
                     </div>
 
-                    {/* Deslizadores Emocionales para el Master */}
+                    {/* Deslizadores Emocionales */}
                     <div className="space-y-3 border-t border-white/10 pt-3">
                       <span className="text-xs font-bold text-amber-300 uppercase">Calibrador Emocional (0 - 100):</span>
 
-                      {/* Amor */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-pink-300">
                           <span>Amor:</span>
@@ -1298,7 +1504,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         />
                       </div>
 
-                      {/* Respeto */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-blue-300">
                           <span>Respeto (+Defensa):</span>
@@ -1314,7 +1519,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         />
                       </div>
 
-                      {/* Ira */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-orange-300">
                           <span>Ira / Frustración (+Ataque):</span>
@@ -1330,7 +1534,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         />
                       </div>
 
-                      {/* Desesperación */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-purple-300">
                           <span>Desesperación (+Vel, -Def):</span>
@@ -1346,7 +1549,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         />
                       </div>
 
-                      {/* Desidia */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-slate-300">
                           <span>Desidia (Desobediencia):</span>
@@ -1362,7 +1564,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         />
                       </div>
 
-                      {/* Motivación */}
                       <div className="space-y-1">
                         <div className="flex justify-between text-xs text-yellow-300">
                           <span>Motivación (Impredecible):</span>

@@ -72,7 +72,6 @@ export const feedPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; na
   const isAmoroso = updated.personality.includes('Amoroso');
 
   updated.hunger = Math.max(0, updated.hunger - 40);
-  // El amor nunca baja, solo sube
   updated.affection.love = Math.min(100, updated.affection.love + (isAmoroso ? 15 : 8));
   updated.affection.respect = Math.min(100, updated.affection.respect + 3);
   updated.affection.anger = Math.max(0, updated.affection.anger - 8);
@@ -98,7 +97,7 @@ export const petPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; nar
   } else if (updated.personality.includes('Explosivo') || updated.affection.anger > 40) {
     narrative = `${updated.nickname} resopló con fiereza pero calmó gradualmente su furia al sentir tu tacto cálido y sereno.`;
   } else if (updated.personality.includes('Depresivo')) {
-    narrative = `${updated.nickname} levantó la mirada tontamente y apoyó su peso en ti; tus caricias disiparon gran parte de su angustia.`;
+    narrative = `${updated.nickname} levantó la mirada conmovido y apoyó su peso en ti; tus caricias disiparon gran parte de su angustia.`;
   } else {
     narrative = `Acariciaste a ${updated.nickname}. El lazo entre ambos se fortalece visiblemente.`;
   }
@@ -117,7 +116,6 @@ export const trainPokemon = (pk: PokemonInstance): { pokemon: PokemonInstance; n
   updated.defense += 2;
   updated.speed += 2;
 
-  // Respeto y motivación nunca bajan, suben al entrenar
   updated.affection.respect = Math.min(100, updated.affection.respect + (isValeroso ? 14 : 8));
   updated.affection.motivation = Math.min(100, updated.affection.motivation + 20);
   updated.affection.apathy = Math.max(0, updated.affection.apathy - 15);
@@ -167,7 +165,7 @@ export const checkAndEvolve = (pk: PokemonInstance): { evolved: boolean; pokemon
   return { evolved: false, pokemon: pk };
 };
 
-// Generar encuentro salvaje con coherencia evolutiva y nivel medio del equipo
+// Generar encuentro salvaje con coherencia evolutiva
 export const generateWildPokemon = (playerTeam: PokemonInstance[] = []): PokemonInstance => {
   const pokedex = getFullAlolaPokedex();
 
@@ -219,78 +217,122 @@ export const attemptCatch = (
   }
 };
 
-// Nombres temáticos de habilidades por tipo elemental
-const TYPE_MOVES: Record<string, { fast: string[]; heavy: string[]; ultimate: string[]; effect: string }> = {
-  Planta: {
-    fast: ['Látigo Cepa certero', 'Hoja Afilada cortante'],
-    heavy: ['Bomba Germen expansiva', 'Mazazo demoledor'],
-    ultimate: ['Rayo Solar cargado con la luz de Alola'],
-    effect: 'envolvió el campo con lianas espinosas'
-  },
-  Fuego: {
-    fast: ['Ascuas incandescentes', 'Nitrocarga a toda velocidad'],
-    heavy: ['Lanzallamas abrasador', 'Rueda Fuego voraz'],
-    ultimate: ['Llamarada destructiva con forma de kanji'],
-    effect: 'elevó la temperatura hasta hacer arder el aire'
-  },
-  Agua: {
-    fast: ['Pistola Agua de precisión', 'Aqua Jet propulsado'],
-    heavy: ['Hidropulso aturdidor', 'Cascada implacable'],
-    ultimate: ['Hidrobomba torrencial que barrió la arena'],
-    effect: 'cubrió el suelo de una densa capa marina'
-  },
-  Eléctrico: {
-    fast: ['Impactrueno veloz', 'Chispazo zigzag'],
-    heavy: ['Rayo de alto voltaje', 'Chispas envolventes'],
-    ultimate: ['Trueno atronador caído directamente de los cielos'],
-    effect: 'cargó la atmósfera con estática ensordecedora'
-  },
-  Fantasma: {
-    fast: ['Tinieblas etéreas', 'Sombra Vil traicionera'],
-    heavy: ['Bola Sombra tenebrosa', 'Garra Umbría'],
-    ultimate: ['Fuerza Espectral que desgarró la realidad'],
-    effect: 'hizo descender la temperatura a un frío espectral'
-  },
-  Hada: {
-    fast: ['Viento Feérico deslumbrante', 'Voz Cautivadora'],
-    heavy: ['Brillo Mágico cegador', 'Beso Drenaje'],
-    ultimate: ['Fuerza Lunar cargada de magia pura'],
-    effect: 'llenó la sala con destellos prismáticos'
-  },
-  Roca: {
-    fast: ['Lanza Rocas afilado', 'Pedrada continua'],
-    heavy: ['Avalancha violenta', 'Roca Afilada'],
-    ultimate: ['Rocazo descomunal que agrietó el suelo'],
-    effect: 'hizo temblar la tierra con estruendo'
-  },
-  Lucha: {
-    fast: ['Golpe Kárate seco', 'Ultrapuño repentino'],
-    heavy: ['A Bocajarro sin piedad', 'Sumisión de hierro'],
-    ultimate: ['Fuerza Bruta que hizo resonar las paredes'],
-    effect: 'dejó escapar una onda de choque física demoledora'
-  },
-  Dragón: {
-    fast: ['Garra Dragón implacable', 'Dragoaliento abrasador'],
-    heavy: ['Carga Dragón arrolladora', 'Pulso Dragón'],
-    ultimate: ['Cometa Draco desatando una lluvia de meteoros'],
-    effect: 'hizo rugir a los ancestros con un aura colosal'
-  },
-  Normal: {
-    fast: ['Ataque Rápido fulgurante', 'Placaje directo'],
-    heavy: ['Golpe Cabeza rotundo', 'Doble Filo arriesgado'],
-    ultimate: ['Hiperrayo de energía pura y destructiva'],
-    effect: 'creó un impacto sordo que levantó una nube de humo'
-  }
+// =========================================================================
+// REPERTORIO CINEMÁTICO: ATAQUES, REACCIONES Y VOCES DE ENTRENADOR
+// =========================================================================
+
+interface MoveFlavor {
+  name: string;
+  attackDesc: (att: string, def: string) => string;
+}
+
+const TYPE_ATTACKS: Record<string, MoveFlavor[]> = {
+  Planta: [
+    {
+      name: 'Follaje Afilado',
+      attackDesc: (a, d) => `${a} batió sus alas agitando el aire y desató una densa ráfaga de hojas cortantes como cuchillas directas hacia ${d}`
+    },
+    {
+      name: 'Látigo Cepa Elástico',
+      attackDesc: (a, d) => `${a} extendió dos gruesas lianas espinosas desde su torso, haciéndolas chasquear en el aire con velocidad de látigo buscando envolver a ${d}`
+    },
+    {
+      name: 'Bomba Germen',
+      attackDesc: (a, d) => `${a} concentró la energía de la flora de Alola en una semilla gigantesca y la arrojó como un mortero explosivo hacia ${d}`
+    }
+  ],
+  Fuego: [
+    {
+      name: 'Ascuas Volcánicas',
+      attackDesc: (a, d) => `${a} arqueó el lomo acumulando un calor incandescente en su garganta y escupió una lluvia de ascuas ardientes sobre ${d}`
+    },
+    {
+      name: 'Colmillo Ígneo',
+      attackDesc: (a, d) => `${a} rugió envolviendo sus fauces en llamaradas carmesí y se abalanzó a gran velocidad para morder el flanco de ${d}`
+    },
+    {
+      name: 'Llamarada Voraz',
+      attackDesc: (a, d) => `${a} liberó una columna de fuego abrasador con forma de estrella que tiñó de rojo toda la arena buscando incinerar a ${d}`
+    }
+  ],
+  Agua: [
+    {
+      name: 'Pistola Agua Presurizada',
+      attackDesc: (a, d) => `${a} infló sus mejillas y disparó un torrente de agua marina a altísima presión que silbó por el aire hacia ${d}`
+    },
+    {
+      name: 'Aqua Jet Propulsado',
+      attackDesc: (a, d) => `${a} se rodeó de una envoltura de agua torrencial y salió disparado como un torpedo sónico directo contra ${d}`
+    },
+    {
+      name: 'Hidropulso Sonoro',
+      attackDesc: (a, d) => `${a} generó una esfera líquida pulsante que vibraba con ecos desorientadores antes de lanzarla de lleno contra ${d}`
+    }
+  ],
+  Eléctrico: [
+    {
+      name: 'Impactrueno Fulgurante',
+      attackDesc: (a, d) => `${a} cargó sus reservas eléctricas hasta hacer chisporrotear el suelo y liberó un relámpago en zigzag directo hacia ${d}`
+    },
+    {
+      name: 'Chispazo Envolvente',
+      attackDesc: (a, d) => `${a} dio un salto giratorio descargando arcos voltaicos en todas direcciones que formaron una jaula estática alrededor de ${d}`
+    }
+  ],
+  Normal: [
+    {
+      name: 'Ataque Rápido Cegador',
+      attackDesc: (a, d) => `${a} desapareció de la vista en un pestañeo gracias a una aceleración fulgurante, reapareciendo en la espalda de ${d}`
+    },
+    {
+      name: 'Placaje Férreo',
+      attackDesc: (a, d) => `${a} bajó el centro de gravedad y embistió con todo su peso corporal como un ariete sin titubear contra ${d}`
+    }
+  ]
 };
 
-const getFlavorMove = (type: string, power: 'fast' | 'heavy' | 'ultimate') => {
-  const table = TYPE_MOVES[type] || TYPE_MOVES['Normal'];
-  const list = table[power];
-  return list[Math.floor(Math.random() * list.length)];
+// Generador de diálogos y gritos de ánimo según el entrenador
+const getTrainerShout = (trainerName: string, pkName: string, mood: 'attack' | 'support' | 'boss'): string => {
+  const lower = trainerName.toLowerCase();
+
+  if (lower.includes('miu') || lower.includes('iruma')) {
+    const miuQuotes = [
+      `«¡Oye, ${pkName}, más te vale no hacerme quedar como una idiota! ¡Muéstrales lo que hace un invento de la Gran Miu Iruma!», chilló Miu ajustándose las gafas con una carcajada arrogante.`,
+      `«¡Ja, ja, ja! ¿Eso es todo lo que tienen? ¡${pkName}, aplasta a ese pedazo de basura antes de que me aburra!», berreó Miu Iruma con descaro y desdén.`,
+      `«¡Atrévete a fallar y te desmantelo! ¡Demuestra quién manda en este maldito archipiélago!», vociferó Miu Iruma agitando los puños en el aire.`
+    ];
+    return miuQuotes[Math.floor(Math.random() * miuQuotes.length)];
+  }
+
+  if (lower.includes('bruno')) {
+    const brunoQuotes = [
+      `«¡${pkName}, confía en tus reflejos! ¡Conectemos nuestro ritmo y ataca sin dudar!», exclamó Bruno con mirada decidida y serena.`,
+      `«¡Resiste con firmeza, ${pkName}! ¡Estamos juntos en este combate y no nos rendiremos jamás!», arengó Bruno desde la línea de banda.`,
+      `«¡Esa es la chispa que hemos entrenado! ¡Aprovecha la apertura ahora!», gritó Bruno con el puño cerrado en alto.`
+    ];
+    return brunoQuotes[Math.floor(Math.random() * brunoQuotes.length)];
+  }
+
+  if (lower.includes('lore')) {
+    const lorenaQuotes = [
+      `«¡${pkName}, mantén la calma y encuentra su punto ciego! ¡Ahora, ejecuta la jugada!», ordenó Loreeena con voz templada y calculadora.`,
+      `«¡No bajes la guardia por nada del mundo, ${pkName}! ¡Enséñales la fuerza de nuestro vínculo!», animó Loreeena con pasión en sus ojos.`,
+      `«¡Esa fue una maniobra impecable! ¡Sigue manteniendo el control de la arena!», felicitó Loreeena con una sonrisa de confianza.`
+    ];
+    return lorenaQuotes[Math.floor(Math.random() * lorenaQuotes.length)];
+  }
+
+  // Genérico para NPCs o Jefes
+  const genericQuotes = [
+    `«¡${pkName}, demuéstrales la fuerza del verdadero entrenamiento insular!», gritó ${trainerName} con autoridad.`,
+    `«¡No cedas ni un centímetro de terreno! ¡Haz valer tu orgullo!», exclamó ${trainerName}.`
+  ];
+  return genericQuotes[Math.floor(Math.random() * genericQuotes.length)];
 };
 
 // =========================================================================
-// MOTOR NARRATIVO DE COMBATE CON EFECTOS PSICOLÓGICOS / EMOCIONALES
+// MOTOR NARRATIVO DE COMBATE CON ESTRUCTURA EN 3 TIEMPOS:
+// 1. EL ATAQUE -> 2. LA REACCIÓN DEL DEFENSOR -> 3. EL RESULTADO Y DAÑO
 // =========================================================================
 export const simulateNarrativeBattle = (
   team1: { name: string; pokemons: PokemonInstance[]; isCoop?: boolean },
@@ -314,7 +356,6 @@ export const simulateNarrativeBattle = (
     };
   }
 
-  // Identificar quién sale al campo
   let active1: PokemonInstance;
   let active2: PokemonInstance;
 
@@ -325,134 +366,145 @@ export const simulateNarrativeBattle = (
   }
   active2 = fighters2.shift()!;
 
-  // 1. APERTURA
-  chronicle.push(`⚡ ¡El desafío ha comenzado en la arena de Alola!`);
+  // 1. APERTURA NARRATIVA CON CARISMA
+  chronicle.push(`⚡ ¡El árbitro de la arena da la señal de inicio y el público contiene el aliento en Alola!`);
+
   if (team2.isTotemBoss) {
-    chronicle.push(`Un rugido atronador sacude el suelo. ${team2.name} desciende imbuido de un aura dorada cegadora: ¡un Pokémon Dominante de proporciones descomunales!`);
-  }
-  if (team1.isCoop) {
-    chronicle.push(`Bruno y Lorena avanzan hombro con hombro, sincronizando sus miradas antes de liberar a sus compañeros al unísono.`);
+    chronicle.push(`Un rugido atronador sacude el suelo. ${team2.name} desciende imbuido de un aura dorada cegadora: ¡un Pokémon Dominante colosal que eclipsa el sol!`);
   }
 
-  chronicle.push(`${team1.name} confía el liderazgo a ${active1.nickname} (Nivel ${active1.level} • ${active1.maxHp} PS), mientras que ${team2.name} responde enviando al frente a ${active2.nickname} (Nivel ${active2.level} • ${active2.maxHp} PS).`);
-  chronicle.push(`Ambas criaturas se miden en el centro del terreno. La tensión en la sala es absoluta.`);
+  if (team1.isCoop) {
+    chronicle.push(`Bruno y Loreeena intercambian una mirada cómplice cargada de determinación antes de enviar a sus compañeros en perfecta sincronía.`);
+  }
+
+  chronicle.push(`${team1.name} envía con decisión a ${active1.nickname} (Nivel ${active1.level} • ${active1.personality}), mientras que ${team2.name} desafía con ${active2.nickname} (Nivel ${active2.level} • ${active2.personality}).`);
+  chronicle.push(`Ambas criaturas se plantan cara a cara en el centro del terreno midiendo cada respiración del rival.`);
 
   let hp1 = active1.maxHp;
   let hp2 = active2.maxHp;
   let revived1 = false;
   let mvpCandidate = active1.nickname;
 
-  // 2. NUDO Y CRUCE DE GOLPES NARRATIVOS (CON IMPACTO EMOCIONAL)
-  for (let round = 1; round <= 7; round++) {
-    const type1 = active1.types[0] || 'Normal';
-    const type2 = active2.types[0] || 'Normal';
+  // 2. RONDAS EN 3 TIEMPOS: (ATAQUE -> REACCIÓN -> DAÑO/RESULTADO)
+  for (let round = 1; round <= 6; round++) {
+    // Alternancia de iniciativa
+    const team1AttacksFirst = (round % 2 !== 0);
+    const attacker = team1AttacksFirst ? active1 : active2;
+    const defender = team1AttacksFirst ? active2 : active1;
+    const attackerTrainer = team1AttacksFirst ? team1.name : team2.name;
+    const defenderTrainer = team1AttacksFirst ? team2.name : team1.name;
 
-    // MODIFICADORES EMOCIONALES:
-    // Respeto -> +Defensa
-    // Ira -> +Ataque
-    // Desesperación -> +Velocidad, -Defensa
-    // Desidia -> Posibilidad de desobedecer
-    // Motivación -> Posibilidad de golpe impredecible / crítico
-    const isDesidia1 = Math.random() * 100 < (active1.affection.apathy * 0.5);
-    const isMotivated1 = Math.random() * 100 < (active1.affection.motivation * 0.45);
-
-    if (isDesidia1) {
-      chronicle.push(`⚠️ ¡Desobediencia! La desidia de ${active1.nickname} se hizo patente en el campo: ignoró la orden de su entrenador, distraído y apático, quedando totalmente expuesto.`);
+    // Diálogo del entrenador al inicio del asalto
+    if (round === 1 || round === 4) {
+      chronicle.push(getTrainerShout(attackerTrainer, attacker.nickname, 'attack'));
     }
 
-    const effectiveAtk1 = active1.attack + Math.round(active1.affection.anger * 0.45);
-    const effectiveDef2 = active2.defense + Math.round(active2.affection.respect * 0.35);
+    const typePool = TYPE_ATTACKS[attacker.types[0]] || TYPE_ATTACKS['Normal'];
+    const move = typePool[Math.floor(Math.random() * typePool.length)];
 
-    const levelDiff = active1.level - active2.level;
-    const speedBoost1 = Math.round(active1.affection.despair * 0.4);
-    const baseAdvantage1 = 50 + (levelDiff * 5) + (active1.hasPlotArmor ? 15 : 0) - (active2.isTotem ? 20 : 0) + (isMotivated1 ? 20 : 0) - (isDesidia1 ? 25 : 0) + speedBoost1;
+    // TIEMPO 1: DESCRIPCIÓN DEL ATAQUE
+    const step1 = `▶ [ATAQUE]: ${move.attackDesc(attacker.nickname, defender.nickname)}.`;
 
-    const roll = Math.random() * 100;
-    const roundMove1 = getFlavorMove(type1, round > 4 ? 'ultimate' : 'heavy');
-    const roundMove2 = getFlavorMove(type2, round > 4 ? 'ultimate' : 'heavy');
+    // Factores emocionales
+    const isDesidia = Math.random() * 100 < (defender.affection.apathy * 0.45);
+    const isDespair = defender.affection.despair > 40;
+    const isMotivated = Math.random() * 100 < (attacker.affection.motivation * 0.5);
+    const isAngerBuff = attacker.affection.anger > 30;
 
-    if (roll < baseAdvantage1) {
-      // Éxito de Team 1
-      const isCritical = Math.random() > 0.55 || isMotivated1;
-      const baseDmg = Math.max(10, effectiveAtk1 - Math.round(effectiveDef2 * 0.4));
-      hp2 -= Math.round(baseDmg * (isCritical ? 1.5 : 1.0));
+    // TIEMPO 2: REACCIÓN DEL DEFENSOR
+    let step2 = '';
+    if (isDesidia) {
+      step2 = `▶ [REACCIÓN]: Sin embargo, ${defender.nickname}, invadido por una desidia abrumadora, se quedó mirando a otra parte con desgana y tardó una eternidad en percatarse de la embestida.`;
+    } else if (isDespair) {
+      step2 = `▶ [REACCIÓN]: Preso de una desesperación frenética, ${defender.nickname} se lanzó en un esquive imprudente y caótico buscando salvarse por puro instinto animal.`;
+    } else if (defender.affection.respect >= 50) {
+      step2 = `▶ [REACCIÓN]: Con una disciplina marcial forjada en el respeto a ${defenderTrainer}, ${defender.nickname} plantó firmemente sus apoyos en la tierra y cruzó sus extremidades para amortiguar la colisión.`;
+    } else {
+      step2 = `▶ [REACCIÓN]: ${defender.nickname} reaccionó en una fracción de segundo, arqueando el cuerpo e intentando un salto evasivo lateral para esquivar la trayectoria.`;
+    }
 
-      if (isMotivated1) {
-        chronicle.push(`🌟 ¡Maniobra Impredecible! Inspirado por una motivación arrolladora, ${active1.nickname} improvisó un quiebro inverosímil antes de clavar un ${roundMove1} en el punto ciego de su adversario.`);
-        highlights.push(`${active1.nickname} realizó una genialidad motivada.`);
-      } else if (isCritical) {
-        chronicle.push(`¡Impacto crítico! ${active1.nickname} desató un ${roundMove1} con furia concentrada. El golpe quebró la guardia de ${active2.nickname}, haciéndolo retroceder varios metros entre jadeos.`);
-        highlights.push(`${active1.nickname} conectó un golpe crítico rotundo.`);
+    // TIEMPO 3: RESOLUCIÓN Y DAÑO
+    let step3 = '';
+    const levelDiff = attacker.level - defender.level;
+    const hitRoll = Math.random() * 100;
+    const hitThreshold = 65 + (levelDiff * 4) + (isDesidia ? 30 : 0) - (defender.affection.respect * 0.2);
+
+    if (hitRoll < hitThreshold) {
+      // El ataque conecta
+      const isCrit = Math.random() > 0.6 || isMotivated;
+      const effectiveAtk = attacker.attack + (isAngerBuff ? Math.round(attacker.affection.anger * 0.4) : 0);
+      const effectiveDef = Math.max(5, defender.defense + Math.round(defender.affection.respect * 0.3) - (isDespair ? 10 : 0));
+      const damage = Math.max(12, Math.round((effectiveAtk * (isCrit ? 1.5 : 1.0)) - (effectiveDef * 0.35)));
+
+      if (team1AttacksFirst) {
+        hp2 -= damage;
       } else {
-        chronicle.push(`${active1.nickname} tomó la delantera ejecutando un ${roundMove1}. En respuesta, ${active2.nickname} intentó contraatacar con ${roundMove2}, pero la sólida defensa enemiga amortiguó el golpe.`);
+        hp1 -= damage;
+      }
+
+      if (isMotivated) {
+        step3 = `▶ [IMPACTO]: ¡Y la motivación de ${attacker.nickname} obró magia! Leyó la reacción del defensor en el aire y corrigió su trayectoria con una floritura acrobática. ¡El impacto fue demoledor en un punto crítico, levantando una nube de polvo y arrancándole un jadeo de dolor a ${defender.nickname}!`;
+        highlights.push(`${attacker.nickname} ejecutó un impacto crítico motivado.`);
+      } else if (isCrit) {
+        step3 = `▶ [IMPACTO]: ¡Golpe rotundo! El ${move.name} impactó de lleno en la guardia de ${defender.nickname}. La onda de choque lo hizo derrapar varios metros sobre la arena, dejándolo visiblemente maltrecho (-${damage} PS).`;
+        highlights.push(`${attacker.nickname} asestó un golpe crítico.`);
+      } else {
+        step3 = `▶ [IMPACTO]: Aunque ${defender.nickname} intentó mitigar el golpe, la contundencia de la técnica fue innegable: recibió el castigo en pleno torso y retrocedió con un gruñido ahogado (-${damage} PS).`;
       }
     } else {
-      // Éxito de Team 2
-      const effectiveAtk2 = active2.attack + Math.round(active2.affection.anger * 0.45);
-      const effectiveDef1 = Math.max(5, (active1.defense + Math.round(active1.affection.respect * 0.35)) - Math.round(active1.affection.despair * 0.25));
-      const baseDmg = Math.max(10, effectiveAtk2 - Math.round(effectiveDef1 * 0.4));
-      
-      hp1 -= Math.round(baseDmg * (active1.hasPlotArmor ? 0.7 : 1.1));
-      chronicle.push(`${active2.nickname} hizo valer su presencia. Con un rápido movimiento liberó un ${roundMove2} que impactó de lleno en ${active1.nickname}, levantando una densa polvareda en el campo.`);
+      // El ataque falla o es bloqueado
+      step3 = `▶ [IMPACTO]: ¡Maniobra defensiva impecable! ${defender.nickname} consiguió esquivar por escasos milímetros el proyectil, que estalló inofensivamente contra el muro de la arena sin causarle daño alguno.`;
     }
 
-    // Comprobar eventos de drama (resurrección emocional de Plot Armor / Amor)
+    // Añadir el bloque de 3 tiempos a la crónica
+    chronicle.push(`${step1}\n${step2}\n${step3}`);
+
+    // PLOT ARMOR / RESURRECCIÓN DE INICIALES
     if (hp1 <= 0 && active1.hasPlotArmor && !revived1) {
       revived1 = true;
       hp1 = Math.round(active1.maxHp * 0.45);
-      
-      let reasonText = '';
-      if (active1.affection.love >= 50) {
-        reasonText = `al escuchar la voz decidida de ${active1.ownerName}, un lazo sagrado de amor y devoción encendió una llama interior en su pecho. Negándose a permitir que su entrenador cayera derrotado, ${active1.nickname} rugió con lágrimas en los ojos y se levantó rodeado de un aura indomable!`;
-      } else if (active1.affection.anger >= 35) {
-        reasonText = `un estallido de orgullo salvaje y furia pura recorrió su columna. ¡Con los ojos inyectados en rabia y despreciando la idea de arrodillarse, ${active1.nickname} desafió las leyes del combate y se mantuvo en pie por pura fuerza de voluntad!`;
-      } else {
-        reasonText = `un destello de respeto marcial hacia ${active1.ownerName} le impidió rendirse, recuperando el aliento en el último segundo.`;
-      }
-
-      chronicle.push(`💥 ¡GIRO EN EL COMBATE! Cuando todo parecía perdido para ${active1.nickname}, ${reasonText}`);
-      highlights.push(`¡${active1.nickname} revivió gracias a su Plot Armor y su vínculo emocional inquebrantable!`);
+      chronicle.push(`💥 ¡EL CLÍMAX DE LA TRAMA! ${active1.nickname} cayó de rodillas sobre la arena con la mirada desvaneciéndose... pero al escuchar la voz desesperada de ${active1.ownerName}, un lazo inquebrantable de amor puro encendió una llama salvaje en su pecho. ¡Negándose a perder ante ${active2.nickname}, rugió hacia el cielo y se levantó rodeado de un aura indomable!`);
+      highlights.push(`¡${active1.nickname} revivió por su Plot Armor y amor inquebrantable!`);
     }
 
+    // Caída de combatientes
     if (hp2 <= 0) {
-      chronicle.push(`El castigo acumulado fue demasiado: ${active2.nickname} se tambaleó y finalmente cayó debilitado sobre la arena.`);
+      chronicle.push(`💀 ¡El cuerpo de ${active2.nickname} no resistió más castigo y cayó exhausto sobre la arena, fuera de combate!`);
       if (fighters2.length > 0) {
         active2 = fighters2.shift()!;
         hp2 = active2.maxHp;
-        chronicle.push(`Sin tiempo que perder, ${team2.name} retira a su caído y manda inmediatamente al combate a ${active2.nickname} (Nv.${active2.level})!`);
+        chronicle.push(`¡${team2.name} retira a su compañero caído y manda de inmediato a la arena a ${active2.nickname} (Nv.${active2.level})!`);
       } else {
         break;
       }
     }
 
     if (hp1 <= 0) {
-      chronicle.push(`${active1.nickname} no pudo continuar y cayó exhausto tras darlo todo.`);
+      chronicle.push(`💀 ¡${active1.nickname} no pudo sostenerse en pie y cayó debilitado entre jadeos tras vaciar hasta su última gota de energía!`);
       if (fighters1.length > 0) {
         active1 = fighters1.shift()!;
         hp1 = active1.maxHp;
         mvpCandidate = active1.nickname;
-        chronicle.push(`¡La batalla no ha terminado! ${team1.name} envía al campo a su siguiente combatiente: ¡adelante, ${active1.nickname} (Nv.${active1.level})!`);
+        chronicle.push(`¡${team1.name} aprieta los dientes y envía al campo a su reserva: ¡adelante, ${active1.nickname} (Nv.${active1.level})!`);
       } else {
         break;
       }
     }
   }
 
-  // 3. CLÍMAX Y DESENLACE
+  // 3. DESENLACE ÉPICO
   const team1Won = hp2 <= 0 || hp1 > hp2;
   const winnerTeam = team1Won ? 'team1' : 'team2';
   const winnerNames = team1Won ? team1.name : team2.name;
 
-  chronicle.push(`\n🏁 EL DESENLACE:`);
+  chronicle.push(`\n🏁 EL GOLPE DE GRACIA:`);
   if (team1Won) {
-    const finalMove = getFlavorMove(active1.types[0] || 'Normal', 'ultimate');
-    chronicle.push(`En el instante decisivo, ${active1.nickname} concentró hasta la última gota de su energía vital en un ${finalMove}. El ataque selló la arena con una detonación ensordecedora, dejando fuera de combate a su adversario.`);
-    chronicle.push(`🏆 ¡${team1.name} se alza con una victoria indiscutible y épica!`);
+    chronicle.push(`Con la adrenalina al límite y la arena envuelta en tensión, ${active1.nickname} cargó toda su energía restante en un último envite definitivo. El impacto selló la victoria levantando una ovación en la sala.`);
+    chronicle.push(`🏆 ¡${team1.name} se corona como vencedor absoluto tras una batalla inolvidable!`);
     mvpCandidate = active1.nickname;
   } else {
-    const finalMove = getFlavorMove(active2.types[0] || 'Normal', 'ultimate');
-    chronicle.push(`Con un último despliegue de poder, ${active2.nickname} desató un ${finalMove} que superó toda resistencia defensiva.`);
-    chronicle.push(`🏆 ¡${team2.name} resiste el asedio y se corona como vencedor del encuentro!`);
+    chronicle.push(`Aprovechando el agotamiento rival, ${active2.nickname} encontró la apertura final y asestó una estocada certera que zanjó el duelo.`);
+    chronicle.push(`🏆 ¡${team2.name} resiste con entereza y se alza con la victoria en Alola!`);
     mvpCandidate = active2.nickname;
   }
 
@@ -462,7 +514,7 @@ export const simulateNarrativeBattle = (
     winnerNames,
     chronicleLines: chronicle,
     mvpPokemon: mvpCandidate,
-    dramaticMoment: highlights[0] || 'El intercambio final de habilidades desató el clímax de la arena.',
+    dramaticMoment: highlights[0] || 'El intercambio en 3 tiempos desató el momento más épico del duelo.',
     generatedAt: Date.now()
   };
 };
@@ -482,36 +534,29 @@ export const applyPostBattleEmotions = (
     if (won) {
       if (participated) {
         updated.streak = updated.streak > 0 ? updated.streak + 1 : 1;
-        // Racha de victorias alimenta motivación
         updated.affection.motivation = Math.min(100, updated.affection.motivation + 15);
         updated.affection.apathy = Math.max(0, updated.affection.apathy - 12);
         updated.affection.respect = Math.min(100, updated.affection.respect + (personality.includes('Valeroso') ? 8 : 4));
         updated.affection.anger = Math.max(0, updated.affection.anger - 5);
       }
     } else {
-      // Derrota
       if (participated) {
         updated.streak = updated.streak < 0 ? updated.streak - 1 : -1;
-        
-        // Ira sube por perder, y más si es rival (Bruno vs Lorena)
         const angerGain = isRivalBattle ? 25 : 15;
         const angerMult = personality.includes('Explosivo') ? 1.8 : 1.0;
         updated.affection.anger = Math.min(100, updated.affection.anger + Math.round(angerGain * angerMult));
 
-        // Racha de derrotas alimenta la desidia
         if (updated.streak <= -2) {
           const apathyMult = personality.includes('Pasota') ? 1.8 : 1.0;
           updated.affection.apathy = Math.min(100, updated.affection.apathy + Math.round(15 * apathyMult));
           updated.affection.motivation = Math.max(0, updated.affection.motivation - 15);
         }
       } else {
-        // No participó en el combate (quedó en banquillo sin salir): sube la desesperación
         const despairGain = personality.includes('Depresivo') ? 25 : 15;
         updated.affection.despair = Math.min(100, updated.affection.despair + despairGain);
       }
     }
 
-    // Amor y respeto NUNCA bajan
     return updated;
   });
 };
