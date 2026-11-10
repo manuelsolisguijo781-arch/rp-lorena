@@ -230,6 +230,16 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     } catch (e) {}
   };
 
+  // Eliminar personaje / NPC
+  const handleDeleteNPC = (npcId: string, npcName: string) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar al personaje "${npcName}"?`)) {
+      pokemonStorage.deleteNPC(npcId);
+      if (adminTarget === npcId) setAdminTarget('bruno');
+      if (selectedNpcId === npcId) setSelectedNpcId('');
+      reloadData();
+    }
+  };
+
   // Datos de los dos equipos de la Arena
   const partnerTeam = pokemonStorage.getTrainerPokemon(partnerKey, partnerDisplayName);
 
@@ -1250,9 +1260,19 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                           <h4 className="text-base font-serif font-bold text-cyan-200">
                             {npc.name}
                           </h4>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                            NPC
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                              NPC
+                            </span>
+                            <button
+                              onClick={() => handleDeleteNPC(npc.id, npc.name)}
+                              title={`Eliminar personaje ${npc.name}`}
+                              className="px-2.5 py-1 text-xs text-red-300 hover:text-white bg-red-950/50 hover:bg-red-800/80 border border-red-500/40 rounded-lg transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              <span>Eliminar</span>
+                            </button>
+                          </div>
                         </div>
                         <p className="text-xs text-amber-300/80 font-medium">
                           {npc.title}
@@ -1344,9 +1364,24 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
               {/* Lista de Pokémon del objetivo seleccionado */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
                 <div className="md:col-span-5 space-y-3">
-                  <h4 className="text-xs font-semibold text-amber-300/80 uppercase">
-                    Equipo de {adminTarget} ({getAdminTeam().length})
-                  </h4>
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-semibold text-amber-300/80 uppercase">
+                      Equipo de {adminTarget === 'bruno' ? 'Bruno' : adminTarget === 'lorena' ? 'Loreeena' : npcs.find(n => n.id === adminTarget)?.name || adminTarget} ({getAdminTeam().length})
+                    </h4>
+                    {adminTarget !== 'bruno' && adminTarget !== 'lorena' && (
+                      <button
+                        onClick={() => {
+                          const targetNpc = npcs.find(n => n.id === adminTarget);
+                          if (targetNpc) handleDeleteNPC(targetNpc.id, targetNpc.name);
+                        }}
+                        className="px-2 py-0.5 text-[11px] text-red-300 hover:text-white bg-red-950/60 hover:bg-red-800/80 border border-red-500/40 rounded-lg transition-all flex items-center gap-1 shadow-sm active:scale-95"
+                        title="Eliminar este personaje y su equipo"
+                      >
+                        <Trash2 className="w-3 h-3 text-red-400" />
+                        <span>Eliminar Personaje</span>
+                      </button>
+                    )}
+                  </div>
 
                   <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
                     {getAdminTeam().map(pk => (
