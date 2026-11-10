@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, Shield, Flame, Sparkles, Swords, Compass, Award, Utensils, Zap, Users, Share2 } from 'lucide-react';
+import { 
+  X, Heart, Shield, Flame, Sparkles, Swords, Compass, Award, 
+  Utensils, Zap, Users, Share2, Crown, Sliders, Trash2, Plus, 
+  AlertTriangle, Frown, Smile, Wind, HelpCircle 
+} from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Player } from '../../types';
-import { PokemonInstance, NPCProfile, TrainerProfile, BattleResult } from '../../types/pokemon';
+import { PokemonInstance, NPCProfile, TrainerProfile, BattleResult, PersonalityType } from '../../types/pokemon';
 import { pokemonStorage, normalizeTrainerKey } from '../../data/pokemonStorage';
-import { getAnimatedSpriteUrl } from '../../data/alolaPokedex';
+import { getAnimatedSpriteUrl, getFullAlolaPokedex } from '../../data/alolaPokedex';
 import { 
   feedPokemon, 
   petPokemon, 
@@ -12,7 +16,10 @@ import {
   checkAndEvolve, 
   generateWildPokemon, 
   attemptCatch, 
-  simulateNarrativeBattle
+  simulateNarrativeBattle,
+  applyPostBattleEmotions,
+  createPokemonInstance,
+  PERSONALITY_OPTIONS
 } from '../../utils/pokemonEngine';
 
 interface PokemonModalProps {
@@ -22,7 +29,7 @@ interface PokemonModalProps {
   onPublishToChat?: (message: string) => void;
 }
 
-type TabType = 'team' | 'wild' | 'arena' | 'trainers';
+type TabType = 'team' | 'wild' | 'arena' | 'trainers' | 'admin';
 
 export const PokemonModal: React.FC<PokemonModalProps> = ({
   isOpen,
@@ -42,7 +49,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   // Arena de combate
   const [npcs, setNpcs] = useState<NPCProfile[]>([]);
-  const [rivalType, setRivalType] = useState<'rival_human' | 'npc' | 'coop'>('rival_human');
+  const [rivalType, setRivalType] = useState<'rival_human' | 'miu_iruma' | 'npc' | 'coop'>('rival_human');
   const [selectedNpcId, setSelectedNpcId] = useState<string>('');
   const [strategy, setStrategy] = useState<'lead' | 'anchor'>('lead');
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
@@ -51,6 +58,12 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   // Personajes / Placeholder
   const [placeholderTrainers, setPlaceholderTrainers] = useState<TrainerProfile[]>([]);
 
+  // Modo Master / Admin
+  const [adminTarget, setAdminTarget] = useState<string>('bruno');
+  const [editingPk, setEditingPk] = useState<PokemonInstance | null>(null);
+  const [newPkDexId, setNewPkDexId] = useState<number>(1);
+  const [newPkLevel, setNewPkLevel] = useState<number>(5);
+
   // Identificar rol del jugador actual
   const currentKey = normalizeTrainerKey(player?.username || player?.displayName || player?.id);
   const isBruno = currentKey === 'bruno';
@@ -58,21 +71,24 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   const partnerDisplayName = isBruno ? 'Loreeena' : 'Bruno';
   const partnerKey = isBruno ? 'lorena' : 'bruno';
 
-  // Cargar datos al abrir
+  const reloadData = () => {
+    const myTeam = pokemonStorage.getTrainerPokemon(currentKey, myDisplayName);
+    setTeam(myTeam);
+    if (myTeam.length > 0) {
+      setSelectedPk(prev => (prev ? myTeam.find(p => p.id === prev.id) || myTeam[0] : myTeam[0]));
+    }
+    const loadedNpcs = pokemonStorage.getNPCs();
+    setNpcs(loadedNpcs);
+    if (loadedNpcs.length > 0 && !selectedNpcId) {
+      setSelectedNpcId(loadedNpcs[0].id);
+    }
+    const trainers = pokemonStorage.getTrainerProfiles(player);
+    setPlaceholderTrainers(trainers);
+  };
+
   useEffect(() => {
     if (isOpen && player) {
-      const myTeam = pokemonStorage.getTrainerPokemon(currentKey, myDisplayName);
-      setTeam(myTeam);
-      if (myTeam.length > 0) {
-        setSelectedPk(myTeam[0]);
-      }
-      const loadedNpcs = pokemonStorage.getNPCs();
-      setNpcs(loadedNpcs);
-      if (loadedNpcs.length > 0) {
-        setSelectedNpcId(loadedNpcs[0].id);
-      }
-      const trainers = pokemonStorage.getTrainerProfiles(player);
-      setPlaceholderTrainers(trainers);
+      reloadData();
     }
   }, [isOpen, player, currentKey, myDisplayName]);
 
@@ -165,6 +181,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   // Datos de los dos equipos de la Arena para mostrar stats y vida
   const partnerTeam = pokemonStorage.getTrainerPokemon(partnerKey, partnerDisplayName);
+  const miuNPC = npcs.find(n => n.id === 'npc_miu_iruma');
 
   let currentTeam1: PokemonInstance[] = team;
   let currentTeam1Name = myDisplayName;
@@ -177,7 +194,10 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   let currentTeam2: PokemonInstance[] = [];
   let currentTeam2Name = '';
 
-  if (rivalType === 'npc') {
+  if (rivalType === 'miu_iruma') {
+    currentTeam2Name = 'Miu Iruma (Inventora)';
+    currentTeam2 = miuNPC ? miuNPC.team : [];
+  } else if (rivalType === 'npc') {
     const npc = npcs.find(n => n.id === selectedNpcId) || npcs[0];
     currentTeam2Name = npc ? `${npc.name} (${npc.title})` : 'Jefe de Alola';
     currentTeam2 = npc ? npc.team : [];
@@ -190,7 +210,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     currentTeam2 = partnerTeam;
   }
 
-  // Iniciar combate
+  // Iniciar combate y procesar emociones posteriores
   const handleStartBattle = () => {
     if (currentTeam1.length === 0 || currentTeam2.length === 0) return;
     setIsFighting(true);
@@ -211,6 +231,32 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
       const result = simulateNarrativeBattle(team1Data, team2Data, strategy);
       setBattleResult(result);
       setIsFighting(false);
+
+      const team1Won = result.winnerTeam === 'team1';
+      const isRival = rivalType === 'rival_human';
+
+      // Actualizar estados emocionales de Team 1
+      const updatedTeam1 = applyPostBattleEmotions(
+        team, 
+        team1Won, 
+        isRival, 
+        currentTeam1.map(p => p.id)
+      );
+      pokemonStorage.saveTrainerPokemon(currentKey, updatedTeam1);
+      setTeam(updatedTeam1);
+
+      // Si fue contra la pareja, actualizar también sus emociones en el storage
+      if (isRival) {
+        const updatedPartnerTeam = applyPostBattleEmotions(
+          partnerTeam,
+          !team1Won,
+          true,
+          currentTeam2.map(p => p.id)
+        );
+        pokemonStorage.saveTrainerPokemon(partnerKey, updatedPartnerTeam);
+      }
+
+      reloadData();
 
       if (result.winnerNames.includes(myDisplayName)) {
         try {
@@ -233,12 +279,66 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     ? Math.round(team.reduce((acc, p) => acc + p.level, 0) / team.length)
     : 5;
 
+  // Lógica del Modo Master / Admin
+  const getAdminTeam = () => {
+    if (adminTarget === 'bruno') return pokemonStorage.getTrainerPokemon('bruno', 'Bruno');
+    if (adminTarget === 'lorena') return pokemonStorage.getTrainerPokemon('lorena', 'Loreeena');
+    const npc = npcs.find(n => n.id === adminTarget);
+    return npc ? npc.team : [];
+  };
+
+  const handleAdminSavePk = () => {
+    if (!editingPk) return;
+    if (adminTarget === 'bruno' || adminTarget === 'lorena') {
+      pokemonStorage.updatePokemon(adminTarget, editingPk);
+    } else {
+      const npc = npcs.find(n => n.id === adminTarget);
+      if (npc) {
+        const updatedTeam = npc.team.map(p => p.id === editingPk.id ? editingPk : p);
+        pokemonStorage.updateNPCPokemon(adminTarget, updatedTeam);
+      }
+    }
+    reloadData();
+    setEditingPk(null);
+  };
+
+  const handleAdminDeletePk = (pkId: string) => {
+    if (adminTarget === 'bruno' || adminTarget === 'lorena') {
+      pokemonStorage.deletePokemon(adminTarget, pkId);
+    } else {
+      const npc = npcs.find(n => n.id === adminTarget);
+      if (npc) {
+        const updatedTeam = npc.team.filter(p => p.id !== pkId);
+        pokemonStorage.updateNPCPokemon(adminTarget, updatedTeam);
+      }
+    }
+    reloadData();
+    if (editingPk?.id === pkId) setEditingPk(null);
+  };
+
+  const handleAdminAddPk = () => {
+    const pokedex = getFullAlolaPokedex();
+    const entry = pokedex.find(p => p.id === Number(newPkDexId)) || pokedex[0];
+    const targetName = adminTarget === 'bruno' ? 'Bruno' : adminTarget === 'lorena' ? 'Loreeena' : 'NPC';
+    const newPk = createPokemonInstance(entry, Number(newPkLevel), adminTarget, targetName, false, false);
+
+    if (adminTarget === 'bruno' || adminTarget === 'lorena') {
+      pokemonStorage.addPokemonToTrainer(adminTarget, newPk);
+    } else {
+      const npc = npcs.find(n => n.id === adminTarget);
+      if (npc) {
+        pokemonStorage.updateNPCPokemon(adminTarget, [...npc.team, newPk]);
+      }
+    }
+    reloadData();
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
       <div className="w-full max-w-5xl bg-genshin-card/95 border border-genshin-gold/60 rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[94vh]">
         
         {/* Cabecera del Modal */}
-        <div className="px-5 py-4 bg-genshin-dark border-b border-genshin-gold/30 flex items-center justify-between">
+        <div className="px-5 py-3.5 bg-genshin-dark border-b border-genshin-gold/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-500/20 border border-amber-400/40 flex items-center justify-center text-xl shadow-inner">
               ⚡
@@ -251,7 +351,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-amber-300/70">
-                Entrenador/a: <span className="font-semibold text-amber-200">{myDisplayName} (@{player.username})</span> • Nivel Medio: <span className="font-bold text-amber-300">Nv.{avgTeamLevel}</span>
+                Entrenador/a: <span className="font-semibold text-amber-200">{myDisplayName}</span> • Nivel Medio: <span className="font-bold text-amber-300">Nv.{avgTeamLevel}</span>
               </p>
             </div>
           </div>
@@ -267,19 +367,19 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
         <div className="flex border-b border-genshin-gold/20 bg-black/40 px-3 pt-2 gap-1 overflow-x-auto">
           <button
             onClick={() => setActiveTab('team')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
               activeTab === 'team'
                 ? 'bg-genshin-card text-amber-200 border-t-2 border-amber-400 font-bold shadow-md'
                 : 'text-amber-300/60 hover:text-amber-200 hover:bg-white/5'
             }`}
           >
             <Heart className="w-4 h-4 text-pink-400" />
-            Mi Equipo & Cuidados ({team.length})
+            Mi Equipo ({team.length})
           </button>
 
           <button
             onClick={() => setActiveTab('wild')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
               activeTab === 'wild'
                 ? 'bg-genshin-card text-amber-200 border-t-2 border-amber-400 font-bold shadow-md'
                 : 'text-amber-300/60 hover:text-amber-200 hover:bg-white/5'
@@ -291,7 +391,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
           <button
             onClick={() => setActiveTab('arena')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
               activeTab === 'arena'
                 ? 'bg-genshin-card text-amber-200 border-t-2 border-amber-400 font-bold shadow-md'
                 : 'text-amber-300/60 hover:text-amber-200 hover:bg-white/5'
@@ -303,14 +403,27 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
           <button
             onClick={() => setActiveTab('trainers')}
-            className={`flex items-center gap-2 px-4 py-2.5 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ${
               activeTab === 'trainers'
                 ? 'bg-genshin-card text-amber-200 border-t-2 border-amber-400 font-bold shadow-md'
                 : 'text-amber-300/60 hover:text-amber-200 hover:bg-white/5'
             }`}
           >
             <Users className="w-4 h-4 text-cyan-400" />
-            Personajes (Bruno & Loreeena)
+            Personajes & Miu Iruma
+          </button>
+
+          {/* MODO MASTER / ADMIN */}
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs sm:text-sm font-medium rounded-t-xl transition-all ml-auto ${
+              activeTab === 'admin'
+                ? 'bg-gradient-to-r from-amber-600/30 to-yellow-600/30 text-amber-300 border-t-2 border-yellow-400 font-bold shadow-md'
+                : 'text-amber-400/60 hover:text-amber-300 hover:bg-white/5'
+            }`}
+          >
+            <Crown className="w-4 h-4 text-yellow-400" />
+            Modo Master
           </button>
         </div>
 
@@ -400,15 +513,14 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                               ? 'bg-pink-500/20 border-pink-400/80 text-pink-200 shadow-md'
                               : 'bg-white/5 border-white/20 text-slate-400 hover:text-white'
                           }`}
-                          title="Permite al Pokémon ignorar debilidades elementales y revivir si cae en combate por lealtad o ira."
                         >
                           <Shield className="w-3.5 h-3.5" />
                           Plot Armor: {selectedPk.hasPlotArmor ? 'ACTIVADO' : 'DESACTIVADO'}
                         </button>
                       </div>
 
-                      <p className="text-xs text-amber-200/80 italic">
-                        "{selectedPk.personality}"
+                      <p className="text-xs text-amber-200/90 font-medium">
+                        Personalidad: <span className="text-amber-300 italic">{selectedPk.personality}</span>
                       </p>
 
                       <div className="flex flex-wrap gap-2 pt-1 justify-center sm:justify-start">
@@ -431,54 +543,89 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     </div>
                   </div>
 
-                  {/* Medidores Emocionales */}
+                  {/* LOS 6 MEDIDORES PSICOLÓGICOS Y EMOCIONALES */}
                   <div className="space-y-3 bg-black/30 p-4 rounded-2xl border border-white/5">
                     <h5 className="text-xs uppercase font-semibold text-amber-300/80 tracking-wider">
-                      Vínculo Emocional (Afecta el Combate)
+                      Estado Emocional y Psicológico (Impacto en Combate)
                     </h5>
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-pink-300 font-medium">
-                        <span className="flex items-center gap-1.5">
-                          <Heart className="w-3.5 h-3.5 fill-pink-400" /> Amor / Cariño
-                        </span>
-                        <span>{selectedPk.affection.love}%</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                      {/* Amor */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-pink-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Heart className="w-3.5 h-3.5 fill-pink-400" /> Amor (Plot Armor)
+                          </span>
+                          <span>{selectedPk.affection.love}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-pink-500 transition-all duration-500" style={{ width: `${selectedPk.affection.love}%` }} />
+                        </div>
                       </div>
-                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-pink-500 to-rose-400 transition-all duration-500"
-                          style={{ width: `${selectedPk.affection.love}%` }}
-                        />
-                      </div>
-                    </div>
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-blue-300 font-medium">
-                        <span className="flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5 text-blue-400" /> Respeto / Disciplina
-                        </span>
-                        <span>{selectedPk.affection.respect}%</span>
+                      {/* Respeto */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-blue-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5 text-blue-400" /> Respeto (+Defensa)
+                          </span>
+                          <span>{selectedPk.affection.respect}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-blue-500 transition-all duration-500" style={{ width: `${selectedPk.affection.respect}%` }} />
+                        </div>
                       </div>
-                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-blue-500 to-cyan-400 transition-all duration-500"
-                          style={{ width: `${selectedPk.affection.respect}%` }}
-                        />
-                      </div>
-                    </div>
 
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-xs text-orange-300 font-medium">
-                        <span className="flex items-center gap-1.5">
-                          <Flame className="w-3.5 h-3.5 text-orange-400" /> Ira / Desprecio al Rival
-                        </span>
-                        <span>{selectedPk.affection.anger}%</span>
+                      {/* Ira */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-orange-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Flame className="w-3.5 h-3.5 text-orange-400" /> Ira / Frustración (+Ataque)
+                          </span>
+                          <span>{selectedPk.affection.anger}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-orange-500 transition-all duration-500" style={{ width: `${selectedPk.affection.anger}%` }} />
+                        </div>
                       </div>
-                      <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-gradient-to-r from-orange-500 to-red-500 transition-all duration-500"
-                          style={{ width: `${selectedPk.affection.anger}%` }}
-                        />
+
+                      {/* Desesperación */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-purple-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Wind className="w-3.5 h-3.5 text-purple-400" /> Desesperación (+Vel, -Def)
+                          </span>
+                          <span>{selectedPk.affection.despair}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-purple-500 transition-all duration-500" style={{ width: `${selectedPk.affection.despair}%` }} />
+                        </div>
+                      </div>
+
+                      {/* Desidia */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-slate-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Frown className="w-3.5 h-3.5 text-slate-400" /> Desidia (Desobediencia)
+                          </span>
+                          <span>{selectedPk.affection.apathy}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-slate-400 transition-all duration-500" style={{ width: `${selectedPk.affection.apathy}%` }} />
+                        </div>
+                      </div>
+
+                      {/* Motivación */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-yellow-300 font-medium">
+                          <span className="flex items-center gap-1.5">
+                            <Smile className="w-3.5 h-3.5 text-yellow-400" /> Motivación (Impredecible)
+                          </span>
+                          <span>{selectedPk.affection.motivation}%</span>
+                        </div>
+                        <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                          <div className="h-full bg-yellow-400 transition-all duration-500" style={{ width: `${selectedPk.affection.motivation}%` }} />
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -500,7 +647,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     >
                       <Sparkles className="w-5 h-5 mb-1 text-pink-400" />
                       <span className="text-xs font-bold">Acariciar</span>
-                      <span className="text-[10px] text-pink-300/60">+Cariño, -Ira</span>
+                      <span className="text-[10px] text-pink-300/60">+Cariño, -Ira/Desidia</span>
                     </button>
 
                     <button
@@ -509,7 +656,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     >
                       <Zap className="w-5 h-5 mb-1 text-cyan-400" />
                       <span className="text-xs font-bold">Entrenar</span>
-                      <span className="text-[10px] text-cyan-300/60">+Nivel, +Stats</span>
+                      <span className="text-[10px] text-cyan-300/60">+Nivel, +Motivación</span>
                     </button>
                   </div>
 
@@ -616,7 +763,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
           {/* ================= PESTAÑA 3: ARENA DE COMBATE NARRATIVO ================= */}
           {activeTab === 'arena' && (
             <div className="space-y-6">
-              {/* Opciones de la batalla */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-black/40 p-4 rounded-3xl border border-white/10">
                 <div className="space-y-1.5">
                   <label className="text-xs font-semibold text-amber-300/80">Modo de Combate:</label>
@@ -626,7 +772,8 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     className="w-full bg-black/60 border border-amber-400/40 rounded-xl px-3 py-2 text-xs text-amber-100 focus:outline-none"
                   >
                     <option value="rival_human">⚔️ Vs {partnerDisplayName}</option>
-                    <option value="npc">🏛️ Vs Kahuna / Jefe de Alola</option>
+                    <option value="miu_iruma">🔧 Vs Miu Iruma (Inventora)</option>
+                    <option value="npc">🏛️ Vs Kahuna / Jefe Totem de Alola</option>
                     <option value="coop">🤝 Cooperativo ({myDisplayName} & {partnerDisplayName} vs Jefe Totem)</option>
                   </select>
                 </div>
@@ -639,7 +786,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                       onChange={(e) => setSelectedNpcId(e.target.value)}
                       className="w-full bg-black/60 border border-amber-400/40 rounded-xl px-3 py-2 text-xs text-amber-100 focus:outline-none"
                     >
-                      {npcs.map(npc => (
+                      {npcs.filter(n => n.id !== 'npc_miu_iruma').map(npc => (
                         <option key={npc.id} value={npc.id}>
                           {npc.name} ({npc.title})
                         </option>
@@ -661,9 +808,8 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                 </div>
               </div>
 
-              {/* VISUALIZADOR DE EQUIPOS CARA A CARA (STATS, NIVEL Y HP) */}
+              {/* CARA A CARA DE EQUIPOS */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Equipo 1 */}
                 <div className="bg-black/40 border border-amber-400/30 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <h5 className="font-serif font-bold text-amber-200 text-sm flex items-center gap-2">
@@ -702,7 +848,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                   </div>
                 </div>
 
-                {/* Equipo 2 */}
                 <div className="bg-black/40 border border-rose-400/30 rounded-2xl p-4 space-y-3">
                   <div className="flex items-center justify-between border-b border-white/10 pb-2">
                     <h5 className="font-serif font-bold text-rose-200 text-sm flex items-center gap-2">
@@ -792,15 +937,15 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
             </div>
           )}
 
-          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO & LOREEENA) ================= */}
+          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO, LOREEENA & MIU IRUMA) ================= */}
           {activeTab === 'trainers' && (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h3 className="text-lg font-serif font-bold text-amber-100">
-                  Entrenadores Vinculados de Alola
+                  Entrenadores y Personajes de Alola
                 </h3>
                 <p className="text-xs text-amber-200/70">
-                  Perfiles conectados a las cuentas de la web con sus Pokémon iniciales asignados.
+                  Perfiles conectados a las cuentas de la web junto a personajes especiales de Alola.
                 </p>
               </div>
 
@@ -812,6 +957,10 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         src={trainer.avatarUrl}
                         alt={trainer.name}
                         className="w-16 h-16 rounded-2xl object-cover border-2 border-amber-400/40 shadow-md"
+                        onError={(e) => {
+                          // Fallback si la imagen tarda en cargar
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+                        }}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between">
@@ -867,6 +1016,374 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     </div>
                   </div>
                 ))}
+
+                {/* TARJETA DE MIU IRUMA */}
+                {miuNPC && (
+                  <div className="bg-black/40 border border-pink-400/40 rounded-3xl p-5 space-y-4">
+                    <div className="flex items-center gap-4">
+                      <img
+                        src={miuNPC.avatarUrl}
+                        alt={miuNPC.name}
+                        className="w-16 h-16 rounded-2xl object-cover border-2 border-pink-400/50 shadow-md"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150';
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between">
+                          <h4 className="text-base font-serif font-bold text-pink-200">
+                            {miuNPC.name}
+                          </h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
+                            NPC Especial
+                          </span>
+                        </div>
+                        <p className="text-xs text-amber-300/80 font-medium">
+                          {miuNPC.title}
+                        </p>
+                        <p className="text-[11px] text-amber-200/60 mt-1">
+                          Vulgar, excéntrica y una inventora brillante de artefactos para Pokémon. Comenzó con un Popplio mimado y temperamental.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="border-t border-white/10 pt-3 space-y-2">
+                      <span className="text-xs font-semibold text-amber-300/80">Equipo de Miu Iruma:</span>
+                      <div className="grid grid-cols-1 gap-2">
+                        {miuNPC.team.map(pk => (
+                          <div key={pk.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-pink-500/20">
+                            <img
+                              src={getAnimatedSpriteUrl(pk.spriteKey)}
+                              alt={pk.name}
+                              className="w-10 h-10 object-contain"
+                            />
+                            <div className="flex-1 min-w-0 text-left">
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-pink-200 truncate">{pk.nickname} ({pk.name})</p>
+                                <span className="text-[10px] font-mono text-amber-300 font-bold">Nv.{pk.level}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-amber-200/70 mt-0.5">
+                                <span>PS: {pk.maxHp}</span>
+                                <span>•</span>
+                                <span>Agua</span>
+                                <span className="text-pink-300 font-semibold">🛡️ Plot Armor</span>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ================= PESTAÑA 5: MODO MASTER / ADMIN ================= */}
+          {activeTab === 'admin' && (
+            <div className="space-y-6">
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-serif font-bold text-amber-100 flex items-center gap-2">
+                    <Crown className="w-5 h-5 text-yellow-400" />
+                    Panel de Control Maestro (Rol & DM)
+                  </h3>
+                  <p className="text-xs text-amber-200/70">
+                    Modifica manualmente los niveles, emociones, personalidades o elimina/añade Pokémon de cualquier personaje.
+                  </p>
+                </div>
+              </div>
+
+              {/* Selector de Personaje a Administrar */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs font-semibold text-amber-300/80">Gestionar a:</span>
+                <button
+                  onClick={() => { setAdminTarget('bruno'); setEditingPk(null); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    adminTarget === 'bruno' ? 'bg-amber-500 text-black shadow-md' : 'bg-white/10 text-amber-200 hover:bg-white/20'
+                  }`}
+                >
+                  Bruno
+                </button>
+                <button
+                  onClick={() => { setAdminTarget('lorena'); setEditingPk(null); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    adminTarget === 'lorena' ? 'bg-amber-500 text-black shadow-md' : 'bg-white/10 text-amber-200 hover:bg-white/20'
+                  }`}
+                >
+                  Loreeena
+                </button>
+                <button
+                  onClick={() => { setAdminTarget('npc_miu_iruma'); setEditingPk(null); }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    adminTarget === 'npc_miu_iruma' ? 'bg-amber-500 text-black shadow-md' : 'bg-white/10 text-amber-200 hover:bg-white/20'
+                  }`}
+                >
+                  Miu Iruma
+                </button>
+                {npcs.filter(n => n.id !== 'npc_miu_iruma').map(npc => (
+                  <button
+                    key={npc.id}
+                    onClick={() => { setAdminTarget(npc.id); setEditingPk(null); }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                      adminTarget === npc.id ? 'bg-amber-500 text-black shadow-md' : 'bg-white/10 text-amber-200 hover:bg-white/20'
+                    }`}
+                  >
+                    {npc.name}
+                  </button>
+                ))}
+              </div>
+
+              {/* Lista de Pokémon del objetivo seleccionado */}
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
+                <div className="md:col-span-5 space-y-3">
+                  <h4 className="text-xs font-semibold text-amber-300/80 uppercase">
+                    Equipo de {adminTarget} ({getAdminTeam().length})
+                  </h4>
+
+                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                    {getAdminTeam().map(pk => (
+                      <div
+                        key={pk.id}
+                        onClick={() => setEditingPk(pk)}
+                        className={`flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-all border ${
+                          editingPk?.id === pk.id ? 'bg-yellow-500/20 border-yellow-400' : 'bg-black/30 border-white/5 hover:bg-white/5'
+                        }`}
+                      >
+                        <img src={getAnimatedSpriteUrl(pk.spriteKey)} alt={pk.name} className="w-10 h-10 object-contain" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-bold text-amber-100 truncate">{pk.nickname} ({pk.name})</p>
+                          <p className="text-[10px] text-amber-300/70 font-mono">Nv.{pk.level} • {pk.personality}</p>
+                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleAdminDeletePk(pk.id); }}
+                          className="p-1.5 text-red-400 hover:text-red-300 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Eliminar Pokémon"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Formulario Añadir Pokémon Nuevo */}
+                  <div className="border-t border-white/10 pt-4 space-y-2">
+                    <h5 className="text-xs font-bold text-amber-200 flex items-center gap-1">
+                      <Plus className="w-3.5 h-3.5" /> Añadir Criatura de Alola:
+                    </h5>
+                    <div className="flex gap-2">
+                      <select
+                        value={newPkDexId}
+                        onChange={(e) => setNewPkDexId(Number(e.target.value))}
+                        className="flex-1 bg-black/60 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-amber-100"
+                      >
+                        {getFullAlolaPokedex().map(p => (
+                          <option key={p.id} value={p.id}>
+                            #{p.id} {p.name} ({p.types.join('/')})
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={newPkLevel}
+                        onChange={(e) => setNewPkLevel(Number(e.target.value))}
+                        className="w-16 bg-black/60 border border-white/10 rounded-xl px-2 py-1.5 text-xs text-amber-100 text-center font-mono"
+                        title="Nivel inicial"
+                      />
+                      <button
+                        onClick={handleAdminAddPk}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold"
+                      >
+                        Añadir
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Panel Editor de Ficha del Pokémon */}
+                {editingPk ? (
+                  <div className="md:col-span-7 bg-black/40 border border-yellow-400/40 rounded-3xl p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-white/10 pb-2">
+                      <h4 className="font-serif font-bold text-amber-100 text-sm flex items-center gap-2">
+                        <Sliders className="w-4 h-4 text-yellow-400" />
+                        Editando: {editingPk.name}
+                      </h4>
+                      <button
+                        onClick={handleAdminSavePk}
+                        className="px-4 py-1.5 bg-yellow-500 hover:bg-yellow-400 text-black text-xs font-bold rounded-xl shadow-md transition-all active:scale-95"
+                      >
+                        💾 Guardar Ficha
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <label className="text-amber-300/80 font-semibold block mb-1">Apodo:</label>
+                        <input
+                          type="text"
+                          value={editingPk.nickname}
+                          onChange={(e) => setEditingPk({ ...editingPk, nickname: e.target.value })}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-amber-300/80 font-semibold block mb-1">Nivel:</label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="100"
+                          value={editingPk.level}
+                          onChange={(e) => {
+                            const lvl = Number(e.target.value);
+                            setEditingPk({
+                              ...editingPk,
+                              level: lvl,
+                              maxHp: 20 + lvl * 3,
+                              currentHp: 20 + lvl * 3,
+                              attack: 15 + Math.round(lvl * 1.5),
+                              defense: 12 + Math.round(lvl * 1.3),
+                              speed: 14 + Math.round(lvl * 1.2)
+                            });
+                          }}
+                          className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-amber-100 font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-amber-300/80 font-semibold block mb-1">Personalidad Afín:</label>
+                      <select
+                        value={editingPk.personality}
+                        onChange={(e) => setEditingPk({ ...editingPk, personality: e.target.value })}
+                        className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-1.5 text-xs text-amber-100"
+                      >
+                        {PERSONALITY_OPTIONS.map(p => (
+                          <option key={p} value={p}>{p}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/10">
+                      <span className="text-xs text-pink-300 font-semibold">Plot Armor (Segundo Aire / Inmunidad):</span>
+                      <button
+                        onClick={() => setEditingPk({ ...editingPk, hasPlotArmor: !editingPk.hasPlotArmor })}
+                        className={`px-3 py-1 rounded-lg text-xs font-bold ${
+                          editingPk.hasPlotArmor ? 'bg-pink-500 text-white' : 'bg-white/10 text-slate-400'
+                        }`}
+                      >
+                        {editingPk.hasPlotArmor ? 'ACTIVO' : 'INACTIVO'}
+                      </button>
+                    </div>
+
+                    {/* Deslizadores Emocionales para el Master */}
+                    <div className="space-y-3 border-t border-white/10 pt-3">
+                      <span className="text-xs font-bold text-amber-300 uppercase">Calibrador Emocional (0 - 100):</span>
+
+                      {/* Amor */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-pink-300">
+                          <span>Amor:</span>
+                          <span className="font-mono">{editingPk.affection.love}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.love}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, love: Number(e.target.value) } })}
+                          className="w-full accent-pink-500"
+                        />
+                      </div>
+
+                      {/* Respeto */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-blue-300">
+                          <span>Respeto (+Defensa):</span>
+                          <span className="font-mono">{editingPk.affection.respect}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.respect}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, respect: Number(e.target.value) } })}
+                          className="w-full accent-blue-500"
+                        />
+                      </div>
+
+                      {/* Ira */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-orange-300">
+                          <span>Ira / Frustración (+Ataque):</span>
+                          <span className="font-mono">{editingPk.affection.anger}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.anger}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, anger: Number(e.target.value) } })}
+                          className="w-full accent-orange-500"
+                        />
+                      </div>
+
+                      {/* Desesperación */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-purple-300">
+                          <span>Desesperación (+Vel, -Def):</span>
+                          <span className="font-mono">{editingPk.affection.despair}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.despair}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, despair: Number(e.target.value) } })}
+                          className="w-full accent-purple-500"
+                        />
+                      </div>
+
+                      {/* Desidia */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-slate-300">
+                          <span>Desidia (Desobediencia):</span>
+                          <span className="font-mono">{editingPk.affection.apathy}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.apathy}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, apathy: Number(e.target.value) } })}
+                          className="w-full accent-slate-400"
+                        />
+                      </div>
+
+                      {/* Motivación */}
+                      <div className="space-y-1">
+                        <div className="flex justify-between text-xs text-yellow-300">
+                          <span>Motivación (Impredecible):</span>
+                          <span className="font-mono">{editingPk.affection.motivation}%</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="0"
+                          max="100"
+                          value={editingPk.affection.motivation}
+                          onChange={(e) => setEditingPk({ ...editingPk, affection: { ...editingPk.affection, motivation: Number(e.target.value) } })}
+                          className="w-full accent-yellow-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="md:col-span-7 flex items-center justify-center text-amber-300/50 p-12 text-xs italic">
+                    Selecciona un Pokémon de la lista izquierda para editar sus atributos o emociones.
+                  </div>
+                )}
               </div>
             </div>
           )}
