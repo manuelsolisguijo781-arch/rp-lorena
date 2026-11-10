@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Heart, Shield, Flame, Sparkles, Swords, Compass, Award, Utensils, Zap, Users, Share2, ToggleLeft, ToggleRight, Check } from 'lucide-react';
+import { X, Heart, Shield, Flame, Sparkles, Swords, Compass, Award, Utensils, Zap, Users, Share2 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Player } from '../../types';
 import { PokemonInstance, NPCProfile, TrainerProfile, BattleResult } from '../../types/pokemon';
-import { pokemonStorage } from '../../data/pokemonStorage';
+import { pokemonStorage, normalizeTrainerKey } from '../../data/pokemonStorage';
 import { getAnimatedSpriteUrl } from '../../data/alolaPokedex';
 import { 
   feedPokemon, 
@@ -42,7 +42,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   // Arena de combate
   const [npcs, setNpcs] = useState<NPCProfile[]>([]);
-  const [rivalType, setRivalType] = useState<'lorena' | 'bruno' | 'npc' | 'coop'>('npc');
+  const [rivalType, setRivalType] = useState<'rival_human' | 'npc' | 'coop'>('rival_human');
   const [selectedNpcId, setSelectedNpcId] = useState<string>('');
   const [strategy, setStrategy] = useState<'lead' | 'anchor'>('lead');
   const [battleResult, setBattleResult] = useState<BattleResult | null>(null);
@@ -51,12 +51,19 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   // Personajes / Placeholder
   const [placeholderTrainers, setPlaceholderTrainers] = useState<TrainerProfile[]>([]);
 
+  // Identificar rol del jugador actual
+  const currentKey = normalizeTrainerKey(player?.username || player?.displayName || player?.id);
+  const isBruno = currentKey === 'bruno';
+  const myDisplayName = isBruno ? 'Bruno' : 'Loreeena';
+  const partnerDisplayName = isBruno ? 'Loreeena' : 'Bruno';
+  const partnerKey = isBruno ? 'lorena' : 'bruno';
+
   // Cargar datos al abrir
   useEffect(() => {
     if (isOpen && player) {
-      const myTeam = pokemonStorage.getTrainerPokemon(player.id, player.displayName || player.username);
+      const myTeam = pokemonStorage.getTrainerPokemon(currentKey, myDisplayName);
       setTeam(myTeam);
-      if (myTeam.length > 0 && !selectedPk) {
+      if (myTeam.length > 0) {
         setSelectedPk(myTeam[0]);
       }
       const loadedNpcs = pokemonStorage.getNPCs();
@@ -64,10 +71,10 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
       if (loadedNpcs.length > 0) {
         setSelectedNpcId(loadedNpcs[0].id);
       }
-      const trainers = pokemonStorage.getPlaceholderTrainers();
+      const trainers = pokemonStorage.getTrainerProfiles(player);
       setPlaceholderTrainers(trainers);
     }
-  }, [isOpen, player]);
+  }, [isOpen, player, currentKey, myDisplayName]);
 
   if (!isOpen) return null;
 
@@ -83,7 +90,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
         : selectedPk.hazañas
     };
     setSelectedPk(updated);
-    pokemonStorage.updatePokemon(player.id, updated);
+    pokemonStorage.updatePokemon(currentKey, updated);
     setTeam(prev => prev.map(p => p.id === updated.id ? updated : p));
     setCareNarrative(newStatus 
       ? `¡Plot Armor ACTIVADO para ${updated.nickname}! Ignorará debilidades elementales y podrá revivir si cae.`
@@ -97,7 +104,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     const { pokemon: updated, narrative } = feedPokemon(selectedPk);
     setSelectedPk(updated);
     setCareNarrative(narrative);
-    pokemonStorage.updatePokemon(player.id, updated);
+    pokemonStorage.updatePokemon(currentKey, updated);
     setTeam(prev => prev.map(p => p.id === updated.id ? updated : p));
   };
 
@@ -106,7 +113,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     const { pokemon: updated, narrative } = petPokemon(selectedPk);
     setSelectedPk(updated);
     setCareNarrative(narrative);
-    pokemonStorage.updatePokemon(player.id, updated);
+    pokemonStorage.updatePokemon(currentKey, updated);
     setTeam(prev => prev.map(p => p.id === updated.id ? updated : p));
   };
 
@@ -115,13 +122,13 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     const { pokemon: updated, narrative } = trainPokemon(selectedPk);
     setSelectedPk(updated);
     setCareNarrative(narrative);
-    pokemonStorage.updatePokemon(player.id, updated);
+    pokemonStorage.updatePokemon(currentKey, updated);
     setTeam(prev => prev.map(p => p.id === updated.id ? updated : p));
 
     const evoCheck = checkAndEvolve(updated);
     if (evoCheck.evolved) {
       setSelectedPk(evoCheck.pokemon);
-      pokemonStorage.updatePokemon(player.id, evoCheck.pokemon);
+      pokemonStorage.updatePokemon(currentKey, evoCheck.pokemon);
       setTeam(prev => prev.map(p => p.id === evoCheck.pokemon.id ? evoCheck.pokemon : p));
       setCareNarrative(evoCheck.message || '¡Tu Pokémon ha evolucionado!');
       try {
@@ -141,10 +148,10 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
     if (!wildPokemon || isCatching) return;
     setIsCatching(true);
     setTimeout(() => {
-      const result = attemptCatch(wildPokemon, player.id, player.displayName || player.username);
+      const result = attemptCatch(wildPokemon, currentKey, myDisplayName);
       setCatchNarrative(result.narrative);
       if (result.success && result.pokemon) {
-        pokemonStorage.addPokemonToTrainer(player.id, result.pokemon);
+        pokemonStorage.addPokemonToTrainer(currentKey, result.pokemon);
         setTeam(prev => [...prev, result.pokemon!]);
         setSelectedPk(result.pokemon);
         setWildPokemon(null);
@@ -157,28 +164,29 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
   };
 
   // Datos de los dos equipos de la Arena para mostrar stats y vida
-  const myName = player.displayName || player.username;
-  const partnerName = myName.toLowerCase().includes('bruno') ? 'Lorena' : 'Bruno';
-  const partnerId = myName.toLowerCase().includes('bruno') ? 'lorena' : 'bruno';
-  const partnerTeam = pokemonStorage.getTrainerPokemon(partnerId, partnerName);
+  const partnerTeam = pokemonStorage.getTrainerPokemon(partnerKey, partnerDisplayName);
 
   let currentTeam1: PokemonInstance[] = team;
-  let currentTeam1Name = myName;
+  let currentTeam1Name = myDisplayName;
 
   if (rivalType === 'coop') {
-    currentTeam1Name = `${myName} & ${partnerName}`;
+    currentTeam1Name = `${myDisplayName} & ${partnerDisplayName}`;
     currentTeam1 = [team[0], ...(partnerTeam.length > 0 ? [partnerTeam[0]] : [])].filter(Boolean);
   }
 
   let currentTeam2: PokemonInstance[] = [];
   let currentTeam2Name = '';
 
-  if (rivalType === 'npc' || rivalType === 'coop') {
+  if (rivalType === 'npc') {
     const npc = npcs.find(n => n.id === selectedNpcId) || npcs[0];
     currentTeam2Name = npc ? `${npc.name} (${npc.title})` : 'Jefe de Alola';
     currentTeam2 = npc ? npc.team : [];
+  } else if (rivalType === 'coop') {
+    const totem = npcs.find(n => n.isTotemBoss) || npcs[0];
+    currentTeam2Name = totem ? totem.name : 'Jefe Dominante';
+    currentTeam2 = totem ? totem.team : [];
   } else {
-    currentTeam2Name = partnerName;
+    currentTeam2Name = partnerDisplayName;
     currentTeam2 = partnerTeam;
   }
 
@@ -197,14 +205,14 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
       const team2Data = {
         name: currentTeam2Name,
         pokemons: [...currentTeam2],
-        isTotemBoss: npcs.find(n => n.id === selectedNpcId)?.isTotemBoss
+        isTotemBoss: (rivalType === 'coop') || npcs.find(n => n.id === selectedNpcId)?.isTotemBoss
       };
 
       const result = simulateNarrativeBattle(team1Data, team2Data, strategy);
       setBattleResult(result);
       setIsFighting(false);
 
-      if (result.winnerNames.includes(myName)) {
+      if (result.winnerNames.includes(myDisplayName)) {
         try {
           confetti({ particleCount: 90, spread: 80, origin: { y: 0.5 } });
         } catch (e) {}
@@ -223,7 +231,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
 
   const avgTeamLevel = team.length > 0 
     ? Math.round(team.reduce((acc, p) => acc + p.level, 0) / team.length)
-    : 10;
+    : 5;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/80 backdrop-blur-md animate-fadeIn">
@@ -243,7 +251,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                 </span>
               </h2>
               <p className="text-xs text-amber-300/70">
-                Entrenador: <span className="font-semibold text-amber-200">{player.displayName || player.username}</span> • Nivel Medio del Equipo: <span className="font-bold text-amber-300">Nv.{avgTeamLevel}</span>
+                Entrenador/a: <span className="font-semibold text-amber-200">{myDisplayName} (@{player.username})</span> • Nivel Medio: <span className="font-bold text-amber-300">Nv.{avgTeamLevel}</span>
               </p>
             </div>
           </div>
@@ -302,7 +310,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
             }`}
           >
             <Users className="w-4 h-4 text-cyan-400" />
-            Personajes (Bruno & Lorena)
+            Personajes (Bruno & Loreeena)
           </button>
         </div>
 
@@ -385,7 +393,6 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                           </span>
                         </h4>
 
-                        {/* TOGGLE MANUAL DE PLOT ARMOR */}
                         <button
                           onClick={handleTogglePlotArmor}
                           className={`px-3 py-1.5 rounded-xl border text-xs font-bold transition-all flex items-center gap-1.5 self-center sm:self-auto ${
@@ -541,7 +548,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                   Hierba Alta de las Islas de Alola
                 </h3>
                 <p className="text-xs text-amber-200/70">
-                  Exploración calibrada al nivel medio de tu equipo (<span className="text-amber-300 font-bold">Nv.{avgTeamLevel}</span>). Solo aparecerán criaturas en fases evolutivas congruentes con su fuerza.
+                  Exploración calibrada al nivel medio de tu equipo (<span className="text-amber-300 font-bold">Nv.{avgTeamLevel}</span>). Las criaturas evolucionadas solo aparecerán cuando alcances el nivel adecuado.
                 </p>
               </div>
 
@@ -618,15 +625,15 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                     onChange={(e: any) => setRivalType(e.target.value)}
                     className="w-full bg-black/60 border border-amber-400/40 rounded-xl px-3 py-2 text-xs text-amber-100 focus:outline-none"
                   >
-                    <option value="npc">Vs Jefe de Gimnasio / NPC de Alola</option>
-                    <option value="lorena">Vs {partnerName}</option>
-                    <option value="coop">🤝 Cooperativo (Bruno & Lorena vs Jefe Totem)</option>
+                    <option value="rival_human">⚔️ Vs {partnerDisplayName}</option>
+                    <option value="npc">🏛️ Vs Kahuna / Jefe de Alola</option>
+                    <option value="coop">🤝 Cooperativo ({myDisplayName} & {partnerDisplayName} vs Jefe Totem)</option>
                   </select>
                 </div>
 
-                {(rivalType === 'npc' || rivalType === 'coop') && (
+                {rivalType === 'npc' && (
                   <div className="space-y-1.5">
-                    <label className="text-xs font-semibold text-amber-300/80">Seleccionar Rival:</label>
+                    <label className="text-xs font-semibold text-amber-300/80">Seleccionar Jefe:</label>
                     <select
                       value={selectedNpcId}
                       onChange={(e) => setSelectedNpcId(e.target.value)}
@@ -642,7 +649,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                 )}
 
                 <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-amber-300/80">Estrategia de Equipo:</label>
+                  <label className="text-xs font-semibold text-amber-300/80">Estrategia de Despliegue:</label>
                   <select
                     value={strategy}
                     onChange={(e: any) => setStrategy(e.target.value)}
@@ -721,9 +728,11 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                           </div>
                           <div className="flex justify-between items-center text-[10px] text-emerald-300/80 mt-1">
                             <span>HP: {p.maxHp} / {p.maxHp}</span>
-                            {p.isTotem && (
+                            {p.isTotem ? (
                               <span className="text-amber-400 font-bold">✨ Aura Dominante</span>
-                            )}
+                            ) : p.hasPlotArmor ? (
+                              <span className="text-pink-300 font-semibold">🛡️ Plot Armor</span>
+                            ) : null}
                           </div>
                           <div className="w-full h-1.5 bg-white/10 rounded-full mt-1 overflow-hidden">
                             <div className="h-full bg-rose-500 w-full rounded-full" />
@@ -783,15 +792,15 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
             </div>
           )}
 
-          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO & LORENA) ================= */}
+          {/* ================= PESTAÑA 4: PERSONAJES (BRUNO & LOREEENA) ================= */}
           {activeTab === 'trainers' && (
             <div className="space-y-6">
               <div className="space-y-1">
                 <h3 className="text-lg font-serif font-bold text-amber-100">
-                  Entrenadores y Personajes de Alola
+                  Entrenadores Vinculados de Alola
                 </h3>
                 <p className="text-xs text-amber-200/70">
-                  Perfiles activos y pasivos. Puedes consultar los equipos de cada personaje o desafiarlos en la Arena.
+                  Perfiles conectados a las cuentas de la web con sus Pokémon iniciales asignados.
                 </p>
               </div>
 
@@ -810,7 +819,7 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                             {trainer.name}
                           </h4>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                            Entrenador/a
+                            Inicial Nv.5
                           </span>
                         </div>
                         <p className="text-xs text-amber-300/80 font-medium">
@@ -830,17 +839,27 @@ export const PokemonModal: React.FC<PokemonModalProps> = ({
                         </span>
                       </span>
 
-                      <div className="grid grid-cols-2 gap-2">
+                      <div className="grid grid-cols-1 gap-2">
                         {trainer.team.map(pk => (
-                          <div key={pk.id} className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/5">
+                          <div key={pk.id} className="flex items-center gap-3 p-2.5 rounded-xl bg-white/5 border border-white/5">
                             <img
                               src={getAnimatedSpriteUrl(pk.spriteKey)}
                               alt={pk.name}
-                              className="w-8 h-8 object-contain"
+                              className="w-10 h-10 object-contain"
                             />
                             <div className="flex-1 min-w-0 text-left">
-                              <p className="text-xs font-bold text-amber-100 truncate">{pk.nickname}</p>
-                              <p className="text-[10px] text-amber-300/70 font-mono">Nv.{pk.level} • {pk.maxHp} PS</p>
+                              <div className="flex items-center justify-between">
+                                <p className="text-xs font-bold text-amber-100 truncate">{pk.nickname} ({pk.name})</p>
+                                <span className="text-[10px] font-mono text-amber-300 font-bold">Nv.{pk.level}</span>
+                              </div>
+                              <div className="flex items-center gap-2 text-[10px] text-amber-200/70 mt-0.5">
+                                <span>PS: {pk.maxHp}</span>
+                                <span>•</span>
+                                <span>{pk.types.join(' / ')}</span>
+                                {pk.hasPlotArmor && (
+                                  <span className="text-pink-300 font-semibold">🛡️ Plot Armor</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         ))}

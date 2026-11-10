@@ -1,25 +1,31 @@
 import { PokemonInstance, NPCProfile, TrainerProfile } from '../types/pokemon';
+import { Player } from '../types';
 import { ALOLA_POKEDEX } from './alolaPokedex';
 import { createPokemonInstance } from '../utils/pokemonEngine';
 
-const STORAGE_KEY_TRAINERS = 'rp_alola_trainers_v2';
-const STORAGE_KEY_NPCS = 'rp_alola_npcs_v2';
+// Version 4 para reiniciar y vincular limpiamente las cuentas de Bruno y Loreeena con Rowlet y Litten Nv. 5
+const STORAGE_KEY_TRAINERS = 'rp_alola_trainers_v4';
+const STORAGE_KEY_NPCS = 'rp_alola_npcs_v4';
 
-// Equipos iniciales por defecto para que al abrir la app todo esté listo
+export const normalizeTrainerKey = (idOrNameOrEmail: string): 'bruno' | 'lorena' => {
+  const s = (idOrNameOrEmail || '').toLowerCase();
+  if (s.includes('bruno')) return 'bruno';
+  return 'lorena'; // Defaults to lorena for manuloelculo07@gmail.com, loreeena, lorena, etc.
+};
+
+// Equipos iniciales oficiales pedidos: Bruno (Rowlet Nv.5) y Loreeena (Litten Nv.5)
 const getInitialPokemonForTrainer = (ownerId: string, ownerName: string): PokemonInstance[] => {
-  if (ownerId === 'bruno' || ownerName.toLowerCase().includes('bruno')) {
+  const key = normalizeTrainerKey(ownerId || ownerName);
+
+  if (key === 'bruno') {
     const rowletEntry = ALOLA_POKEDEX.find(p => p.name === 'Rowlet') || ALOLA_POKEDEX[0];
-    const pikaEntry = ALOLA_POKEDEX.find(p => p.name === 'Pikachu') || ALOLA_POKEDEX[1];
     return [
-      createPokemonInstance(rowletEntry, 14, 'bruno', 'Bruno', true, false, 'Rowlet', true),
-      createPokemonInstance(pikaEntry, 15, 'bruno', 'Bruno', true, false, 'Pikachu', true)
+      createPokemonInstance(rowletEntry, 5, 'bruno', 'Bruno', true, false, 'Rowlet', true)
     ];
   } else {
     const littenEntry = ALOLA_POKEDEX.find(p => p.name === 'Litten') || ALOLA_POKEDEX[3];
-    const vulpixEntry = ALOLA_POKEDEX.find(p => p.name === 'Vulpix de Alola') || ALOLA_POKEDEX[7];
     return [
-      createPokemonInstance(littenEntry, 14, 'lorena', 'Lorena', true, false, 'Litten', true),
-      createPokemonInstance(vulpixEntry, 15, 'lorena', 'Lorena', true, false, 'Vulpix Nieve', false)
+      createPokemonInstance(littenEntry, 5, 'lorena', 'Loreeena', true, false, 'Litten', true)
     ];
   }
 };
@@ -35,7 +41,7 @@ const getInitialNPCs = (): NPCProfile[] => {
       title: 'Pokémon Dominante de la Cueva Sotobosque',
       avatarUrl: 'https://play.pokemonshowdown.com/sprites/ani/gumshoos.gif',
       isTotemBoss: true,
-      team: [createPokemonInstance(gumshoos, 18, 'totem_gumshoos', 'Totem Gumshoos', false, true, 'Gumshoos Dominante')]
+      team: [createPokemonInstance(gumshoos, 12, 'totem_gumshoos', 'Totem Gumshoos', false, true, 'Gumshoos Dominante')]
     },
     {
       id: 'totem_lurantis',
@@ -43,7 +49,7 @@ const getInitialNPCs = (): NPCProfile[] => {
       title: 'Pokémon Dominante de la Jungla Umbría',
       avatarUrl: 'https://play.pokemonshowdown.com/sprites/ani/lurantis.gif',
       isTotemBoss: true,
-      team: [createPokemonInstance(lurantis, 24, 'totem_lurantis', 'Totem Lurantis', false, true, 'Lurantis Dominante')]
+      team: [createPokemonInstance(lurantis, 15, 'totem_lurantis', 'Totem Lurantis', false, true, 'Lurantis Dominante')]
     },
     {
       id: 'kahuna_kaudan',
@@ -52,8 +58,8 @@ const getInitialNPCs = (): NPCProfile[] => {
       avatarUrl: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/trainers/hala.png',
       isTotemBoss: false,
       team: [
-        createPokemonInstance(ALOLA_POKEDEX.find(p => p.name === 'Hariyama') || ALOLA_POKEDEX[24], 20, 'kaudan', 'Kaudan', false, false),
-        createPokemonInstance(ALOLA_POKEDEX.find(p => p.name === 'Crabrawler') || ALOLA_POKEDEX[22], 19, 'kaudan', 'Kaudan', false, false)
+        createPokemonInstance(ALOLA_POKEDEX.find(p => p.name === 'Hariyama') || ALOLA_POKEDEX[24], 14, 'kaudan', 'Kaudan', false, false),
+        createPokemonInstance(ALOLA_POKEDEX.find(p => p.name === 'Crabrawler') || ALOLA_POKEDEX[22], 12, 'kaudan', 'Kaudan', false, false)
       ]
     }
   ];
@@ -61,27 +67,29 @@ const getInitialNPCs = (): NPCProfile[] => {
 
 export const pokemonStorage = {
   getTrainerPokemon: (ownerId: string, ownerName: string): PokemonInstance[] => {
+    const key = normalizeTrainerKey(ownerId || ownerName);
     try {
       const data = localStorage.getItem(STORAGE_KEY_TRAINERS);
       if (data) {
         const parsed = JSON.parse(data);
-        if (parsed[ownerId] && parsed[ownerId].length > 0) {
-          return parsed[ownerId];
+        if (parsed[key] && parsed[key].length > 0) {
+          return parsed[key];
         }
       }
     } catch (e) {
       console.error('Error reading trainer pokemon', e);
     }
     const initial = getInitialPokemonForTrainer(ownerId, ownerName);
-    pokemonStorage.saveTrainerPokemon(ownerId, initial);
+    pokemonStorage.saveTrainerPokemon(key, initial);
     return initial;
   },
 
   saveTrainerPokemon: (ownerId: string, team: PokemonInstance[]) => {
+    const key = normalizeTrainerKey(ownerId);
     try {
       const data = localStorage.getItem(STORAGE_KEY_TRAINERS);
       const parsed = data ? JSON.parse(data) : {};
-      parsed[ownerId] = team;
+      parsed[key] = team;
       localStorage.setItem(STORAGE_KEY_TRAINERS, JSON.stringify(parsed));
     } catch (e) {
       console.error('Error saving trainer pokemon', e);
@@ -89,17 +97,19 @@ export const pokemonStorage = {
   },
 
   addPokemonToTrainer: (ownerId: string, pokemon: PokemonInstance) => {
-    const team = pokemonStorage.getTrainerPokemon(ownerId, pokemon.ownerName);
+    const key = normalizeTrainerKey(ownerId);
+    const team = pokemonStorage.getTrainerPokemon(key, pokemon.ownerName);
     team.push(pokemon);
-    pokemonStorage.saveTrainerPokemon(ownerId, team);
+    pokemonStorage.saveTrainerPokemon(key, team);
   },
 
   updatePokemon: (ownerId: string, updated: PokemonInstance) => {
-    const team = pokemonStorage.getTrainerPokemon(ownerId, updated.ownerName);
+    const key = normalizeTrainerKey(ownerId);
+    const team = pokemonStorage.getTrainerPokemon(key, updated.ownerName);
     const index = team.findIndex(p => p.id === updated.id);
     if (index !== -1) {
       team[index] = updated;
-      pokemonStorage.saveTrainerPokemon(ownerId, team);
+      pokemonStorage.saveTrainerPokemon(key, team);
     }
   },
 
@@ -123,27 +133,38 @@ export const pokemonStorage = {
     }
   },
 
-  getPlaceholderTrainers: (): TrainerProfile[] => {
+  getTrainerProfiles: (currentPlayer?: Player | null): TrainerProfile[] => {
     const brunoTeam = pokemonStorage.getTrainerPokemon('bruno', 'Bruno');
-    const lorenaTeam = pokemonStorage.getTrainerPokemon('lorena', 'Lorena');
+    const lorenaTeam = pokemonStorage.getTrainerPokemon('lorena', 'Loreeena');
+
+    const isCurrentBruno = currentPlayer && normalizeTrainerKey(currentPlayer.username || currentPlayer.displayName) === 'bruno';
+
+    // Usar los avatares reales de las cuentas en la medida de lo posible
+    const brunoAvatar = (isCurrentBruno && currentPlayer?.avatarUrl) 
+      ? currentPlayer.avatarUrl 
+      : 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80';
+
+    const lorenaAvatar = (!isCurrentBruno && currentPlayer?.avatarUrl)
+      ? currentPlayer.avatarUrl
+      : 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80';
 
     return [
       {
         id: 'bruno',
         name: 'Bruno',
-        title: 'Entrenador de Alola • Retador del Recorrido Insular',
+        title: 'Entrenador de Alola (@bruno)',
         role: 'jugador',
-        avatarUrl: 'https://images.unsplash.com/photo-1566492031773-4f4e44671857?w=150&auto=format&fit=crop&q=80',
-        bio: 'Determinado y aventurero. Explora las islas de Alola en busca de desafiar a los Kahunas y proteger a sus compañeros.',
+        avatarUrl: brunoAvatar,
+        bio: 'Determinado y aventurero. Ha iniciado su recorrido insular en Alola junto a su compañero inicial Rowlet.',
         team: brunoTeam
       },
       {
         id: 'lorena',
-        name: 'Lorena',
-        title: 'Entrenadora de Alola • Especialista en Vínculos',
+        name: 'Loreeena',
+        title: 'Entrenadora de Alola (@manuloelculo07@gmail.com)',
         role: 'jugador',
-        avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-        bio: 'Estratega innata y protectora. Forja lazos profundos con criaturas de Alola combinando elegancia y poder.',
+        avatarUrl: lorenaAvatar,
+        bio: 'Estratega innata y protectora. Ha comenzado su viaje por el archipiélago de Alola acompañada de su compañero inicial Litten.',
         team: lorenaTeam
       }
     ];
